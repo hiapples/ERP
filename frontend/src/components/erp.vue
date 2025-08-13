@@ -134,7 +134,7 @@ const submitAll = async () => {
 
   try {
     const dataWithDate = validRows.map(row => ({ ...row, date: selectedDate.value }))
-    const res = await axios.post('https://erp-ce1j.onrender.com/api/records', dataWithDate)
+    const res = await axios.post('https://erp-ce1j.onrender.com/records', dataWithDate)
     alert(`✅ 共送出 ${res.data.inserted} 筆入庫資料`)
     await fetchRecords3()
     rows.value = Array.from({ length: 5 }, () => ({ item: '', quantity: '', price: '', note: '' }))
@@ -154,7 +154,7 @@ const submitAll2 = async () => {
 
   try {
     const dataWithDate = validRows.map(row => ({ ...row, date: selectedDate3.value, price: getAvgPrice(row.item) }))
-    const res = await axios.post('https://erp-ce1j.onrender.com/api/outrecords', dataWithDate)
+    const res = await axios.post('https://erp-ce1j.onrender.com/outrecords', dataWithDate)
     alert(`✅ 共送出 ${res.data.inserted} 筆出庫資料`)
     await fetchRecords3()
     rows2.value = Array.from({ length: 5 }, () => ({ item: '', quantity: '', price: '', note: '' }))
@@ -166,7 +166,7 @@ const submitAll2 = async () => {
 // 讀入/出庫
 const fetchRecords = async () => {
   try {
-    let url = 'https://erp-ce1j.onrender.com/api/records'
+    let url = 'https://erp-ce1j.onrender.com/records'
     const queryParams = []
     if (selectedDate2.value) queryParams.push('date=' + selectedDate2.value)
     if (selectedItem.value) queryParams.push('item=' + encodeURIComponent(selectedItem.value))
@@ -179,7 +179,7 @@ const fetchRecords = async () => {
 }
 const fetchRecords2 = async () => {
   try {
-    let url = 'https://erp-ce1j.onrender.com/api/outrecords'
+    let url = 'https://erp-ce1j.onrender.com/outrecords'
     const queryParams = []
     if (selectedDate4.value) queryParams.push('date=' + selectedDate4.value)
     if (selectedItem2.value) queryParams.push('item=' + encodeURIComponent(selectedItem2.value))
@@ -193,8 +193,8 @@ const fetchRecords2 = async () => {
 const fetchRecords3 = async () => {
   try {
     isLoading.value = true
-    const inResPromise = axios.get('https://erp-ce1j.onrender.com/api/records')
-    const outResPromise = axios.get('https://erp-ce1j.onrender.com/api/outrecords')
+    const inResPromise = axios.get('https://erp-ce1j.onrender.com/records')
+    const outResPromise = axios.get('https://erp-ce1j.onrender.com/outrecords')
     const [inRes, outRes] = await Promise.all([inResPromise, outResPromise])
     recordList.value = inRes.data
     recordList2.value = outRes.data
@@ -214,7 +214,7 @@ const fetchTotalAmount = async () => {
     return
   }
   try {
-    const res = await fetch(`https://erp-ce1j.onrender.com/api/outrecords/total/${selectedDate5.value}`)
+    const res = await fetch(`https://erp-ce1j.onrender.com/outrecords/total/${selectedDate5.value}`)
     if (!res.ok) {
       console.error('API 回傳錯誤：', res.status)
       totalGroup1.value = ''
@@ -236,7 +236,7 @@ const isAutofilling = ref(false)
 async function loadReportForDate (dateStr) {
   if (!dateStr) return
   try {
-    const { data } = await axios.get(`https://erp-ce1j.onrender.com/api/reports/${encodeURIComponent(dateStr)}`)
+    const { data } = await axios.get(`https://erp-ce1j.onrender.com/reports/${encodeURIComponent(dateStr)}`)
     isAutofilling.value = true
     if (data) {
       const cake = data?.qtyCake ?? (Array.isArray(data?.items) ? (data.items.find(i => i.name === '檸檬汁')?.qty ?? 0) : 0)
@@ -270,7 +270,7 @@ const isReportsLoading = ref(false)
 async function fetchReportsList () {
   try {
     isReportsLoading.value = true
-    const { data } = await axios.get('https://erp-ce1j.onrender.com/api/reports')
+    const { data } = await axios.get('https://erp-ce1j.onrender.com/reports')
     reportList.value = (data || []).sort((a, b) => (b.date || '').localeCompare(a.date || ''))
     await fetchCostsForReports()
   } catch (e) {
@@ -283,7 +283,7 @@ async function fetchReportsList () {
 async function fetchCostsForReports () {
   const tasks = reportList.value.map(async (r) => {
     try {
-      const res = await axios.get(`https://erp-ce1j.onrender.com/api/outrecords/total/${encodeURIComponent(r.date)}`)
+      const res = await axios.get(`https://erp-ce1j.onrender.com/outrecords/total/${encodeURIComponent(r.date)}`)
       const { totalGroup1 = 0, totalGroup2 = 0 } = res.data || {}
       costsByDate.value[r.date] = { g1: Number(totalGroup1) || 0, g2: Number(totalGroup2) || 0 }
     } catch (e) {
@@ -335,7 +335,7 @@ function dailyNet (r) {
 const confirmEdit = async () => {
   const editingRecord = recordList.value.find(r => r._id === editingId.value)
   try {
-    await axios.put(`https://erp-ce1j.onrender.com/api/records/${editingId.value}`, editingRecord)
+    await axios.put(`https://erp-ce1j.onrender.com/records/${editingId.value}`, editingRecord)
     editingId.value = null
     await fetchRecords()
   } catch (err) {
@@ -346,7 +346,7 @@ const confirmEdit2 = async () => {
   const editingRecord = recordList2.value.find(r => r._id === editingId.value)
   try {
     const api = currentPage.value === 'three' ? 'outrecords' : 'records'
-    await axios.put(`https://erp-ce1j.onrender.com/api/${api}/${editingId.value}`, editingRecord)
+    await axios.put(`https://erp-ce1j.onrender.com/${api}/${editingId.value}`, editingRecord)
     editingId.value = null
     currentPage.value === 'three' ? await fetchRecords2() : await fetchRecords()
   } catch (err) {
@@ -358,7 +358,7 @@ const startEditRecord2 = (id) => { editingId.value = id }
 const deleteRecord = async (id) => {
   if (confirm('❌ 確定要刪除這筆資料嗎？')) {
     try {
-      await axios.delete(`https://erp-ce1j.onrender.com/api/records/${id}`)
+      await axios.delete(`https://erp-ce1j.onrender.com/records/${id}`)
       await fetchRecords()
     } catch (err) {
       alert('❌ 刪除失敗：' + err.message)
@@ -369,7 +369,7 @@ const deleteRecord2 = async (id) => {
   if (confirm('❌ 確定要刪除這筆資料嗎？')) {
     try {
       const api = currentPage.value === 'three' ? 'outrecords' : 'records'
-      await axios.delete(`https://erp-ce1j.onrender.com/api/${api}/${id}`)
+      await axios.delete(`https://erp-ce1j.onrender.com/${api}/${id}`)
       currentPage.value === 'three' ? await fetchRecords2() : await fetchRecords()
     } catch (err) {
       alert('❌ 刪除失敗：' + err.message)
@@ -380,7 +380,7 @@ const deleteReportByDate = async (dateStr) => {
   if (!dateStr) return
   if (!confirm(`❌ 確定要清除 ${dateStr} 的報表資料嗎？`)) return
   try {
-    const url = `https://erp-ce1j.onrender.com/api/reports/${encodeURIComponent(dateStr)}`
+    const url = `https://erp-ce1j.onrender.com/reports/${encodeURIComponent(dateStr)}`
     await axios.delete(url)
     alert('✅ 已清除該日報表資料')
     await fetchReportsList()
@@ -482,7 +482,7 @@ const submitReport = async () => {
   }
 
   try {
-    await axios.post('https://erp-ce1j.onrender.com/api/reports', payload)
+    await axios.post('https://erp-ce1j.onrender.com/reports', payload)
     alert('✅ 報表已送出')
   } catch (err) {
     alert('❌ 報表傳送失敗：' + err.message)
