@@ -3,7 +3,7 @@ import { ref, onMounted, watch, computed } from 'vue'
 import axios from 'axios'
 
 // === API Base ===
-const API = 'https://erp-ce1j.onrender.com'
+const API = 'https://erp-ahup.onrender.com'
 
 // === 分頁狀態 ===
 const currentPage = ref('one')
