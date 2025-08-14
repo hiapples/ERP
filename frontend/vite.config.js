@@ -1,15 +1,18 @@
-// frontend/vite.config.js
+import { fileURLToPath, URL } from 'node:url'
+
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import path from 'path'
+import vueDevTools from 'vite-plugin-vue-devtools'
 
+// https://vite.dev/config/
 export default defineConfig({
-  plugins: [vue()],
-  // 產出到 backend/dist
-  build: {
-    outDir: path.resolve(__dirname, '../backend/dist'),
-    emptyOutDir: true
+  plugins: [
+    vue(),
+    vueDevTools(),
+  ],
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url))
+    },
   },
-  // 同網域根目錄
-  base: '/'
 })
