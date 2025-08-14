@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import InRecord from '../models/inrecord.js'
+import InRecord from '../models/in.js'
 
 const router = Router()
 
