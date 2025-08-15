@@ -41,7 +41,7 @@ router.post('/', async (req, res) => {
   }
 })
 
-// 刪除單日報表（總攬「刪」按鈕）
+// 刪除單日報表
 router.delete('/:date', async (req, res) => {
   try {
     await Report.findOneAndDelete({ date: req.params.date })

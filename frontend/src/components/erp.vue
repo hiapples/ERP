@@ -56,7 +56,7 @@ const isEmpty = (v) => v === '' || v === null || v === undefined
 const isRowEmptyIn = (row) => !row.item && isEmpty(row.quantity) && isEmpty(row.price)
 const isRowCompleteIn = (row) =>
   !!row.item && !isEmpty(row.quantity) && Number(row.quantity) > 0 &&
-  !isEmpty(row.price) && Number(row.price) > 0
+  !isEmpty(row.price) && Number(row.price) >= 0   // 整筆總價允許 0
 
 const isRowEmptyOut = (row) => !row.item && isEmpty(row.quantity)
 const isRowCompleteOut = (row) =>
@@ -84,18 +84,18 @@ function checkOutStock () {
 
 const getAvgPrice = (item) => {
   const found = itemSummary.value.find(i => i.item === item)
-  return found ? found.avgPrice : 0
+  return found && found.quantity > 0 ? found.avgPrice : 0
 }
 
 // 入/出庫輸入列
 const rows = ref(Array.from({ length: 5 }, () => ({ item: '', quantity: '', price: '', note: '' })))
 const rows2 = ref(Array.from({ length: 5 }, () => ({ item: '', quantity: '', price: '', note: '' })))
 
-// 送出入庫
+// 送出入庫（price = 整筆總價，直接照填）
 const submitAll = async () => {
   if (!selectedDate.value) { alert('❌ 請選擇日期'); return }
   const hasIncomplete = rows.value.some(r => !isRowEmptyIn(r) && !isRowCompleteIn(r))
-  if (hasIncomplete) { alert('❌ 入庫：每一列要嘛空白、要嘛品項/數量/價格都填好（數量/價格需 > 0）'); return }
+  if (hasIncomplete) { alert('❌ 入庫：每一列要嘛空白、要嘛品項/數量/總價都填好（數量>0；總價≥0）'); return }
   const validRows = rows.value.filter(isRowCompleteIn)
   if (validRows.length === 0) { alert('❌ 入庫：請至少填寫一列完整資料'); return }
 
@@ -110,17 +110,22 @@ const submitAll = async () => {
   }
 }
 
-// 送出出庫
+// 送出出庫（price = 平均單價 × 數量 → 存整筆總價）
 const submitAll2 = async () => {
   if (!selectedDate3.value) { alert('❌ 請選擇日期'); return }
   const hasIncomplete = rows2.value.some(r => !isRowEmptyOut(r) && !isRowCompleteOut(r))
-  if (hasIncomplete) { alert('❌ 出庫：每一列要嘛空白、要嘛品項/數量都填好（數量需 > 0，且平均單價需 > 0）'); return }
+  if (hasIncomplete) { alert('❌ 出庫：每一列要嘛空白、要嘛品項/數量都填好（數量>0，且平均單價>0）'); return }
   const validRows = rows2.value.filter(isRowCompleteOut)
   if (validRows.length === 0) { alert('❌ 出庫：請至少填寫一列完整資料'); return }
   if (!checkOutStock()) return
 
   try {
-    const dataWithDate = validRows.map(row => ({ ...row, date: selectedDate3.value, price: getAvgPrice(row.item) }))
+    const dataWithDate = validRows.map(row => {
+      const avg = getAvgPrice(row.item)
+      const qty = Number(row.quantity)
+      const total = avg * qty
+      return { ...row, date: selectedDate3.value, price: total }
+    })
     const { data } = await axios.post(`${API}/outrecords`, dataWithDate)
     alert(`✅ 共送出 ${data.inserted} 筆出庫資料`)
     await fetchRecords3()
@@ -173,7 +178,7 @@ const fetchRecords3 = async () => {
   }
 }
 
-// 報表單日成本
+// 報表單日成本（直接加總當日出庫「整筆總價」）
 const fetchTotalAmount = async () => {
   if (!selectedDate5.value) { totalGroup1.value = ''; totalGroup2.value = ''; return }
   try {
@@ -316,19 +321,21 @@ const deleteReportByDate = async (dateStr) => {
   }
 }
 
-// 庫存彙總
+// 庫存彙總（整筆總價直接相加）
 const itemSummary = computed(() => {
   const summary = []
   for (const item of itemOptions) {
     const inRecords = recordList.value.filter(r => r.item === item)
     const inQty = inRecords.reduce((sum, r) => sum + Number(r.quantity), 0)
-    const inTotalPrice = inRecords.reduce((sum, r) => sum + Number(r.quantity) * Number(r.price), 0)
+    const inTotalPrice = inRecords.reduce((sum, r) => sum + Number(r.price), 0) // 整筆總價
+
     const outRecords = recordList2.value.filter(r => r.item === item)
     const outQty = outRecords.reduce((sum, r) => sum + Number(r.quantity), 0)
-    const outTotalPrice = outRecords.reduce((sum, r) => sum + Number(r.quantity) * Number(r.price), 0)
+    const outTotalPrice = outRecords.reduce((sum, r) => sum + Number(r.price), 0) // 整筆總價
+
     const stockQty = inQty - outQty
     const stockTotalPrice = inTotalPrice - outTotalPrice
-    const avgPrice = stockQty > 0 ? stockTotalPrice / stockQty : 0
+    const avgPrice = stockQty > 0 ? (stockTotalPrice / stockQty) : 0
     summary.push({ item, quantity: stockQty, avgPrice, totalPrice: stockTotalPrice })
   }
   return summary
@@ -447,7 +454,7 @@ const submitReport = async () => {
                 <th></th>
                 <th>品項</th>
                 <th>數量</th>
-                <th>價格</th>
+                <th>總價(整筆)</th>
                 <th>備註</th>
               </tr>
             </thead>
@@ -503,7 +510,7 @@ const submitReport = async () => {
                 <th></th>
                 <th>品項</th>
                 <th>數量</th>
-                <th>價格</th>
+                <th>總價</th>
                 <th>備註</th>
                 <th v-if="!editingId">日期</th>
               </tr>
@@ -588,7 +595,7 @@ const submitReport = async () => {
                   <td>{{ record.item }}</td>
                   <td>{{ record.quantity }}</td>
                   <td>{{ record.avgPrice.toFixed(2) }}</td>
-                  <td>{{ Math.round(Number(record.totalPrice) || 0) }}</td>
+                  <td>{{ (Number(record.totalPrice) || 0).toFixed(2) }}</td>
                 </tr>
               </tbody>
             </table>
@@ -623,7 +630,7 @@ const submitReport = async () => {
                 <th></th>
                 <th>品項</th>
                 <th>數量</th>
-                <th>單價</th>
+                <th>單價(平均)</th>
                 <th>備註</th>
               </tr>
             </thead>
@@ -679,7 +686,7 @@ const submitReport = async () => {
                 <th></th>
                 <th>品項</th>
                 <th>數量</th>
-                <th>價格</th>
+                <th>總價</th>
                 <th>備註</th>
                 <th v-if="!editingId">日期</th>
               </tr>
@@ -873,7 +880,6 @@ const submitReport = async () => {
 </template>
 
 <style scoped>
-/* 原樣式完全不變 */
 .item {
   background-color: #b2afaf;
   width: 50%;
@@ -964,7 +970,6 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
 .total-row > td:first-child::before { left: 20%; width: 100%; }
 .total-row > td:last-child::before { width: 80%; }
 
-/* 只有「報表總攬」行高加大、刪按鈕垂直置中 */
 .report-table tbody tr { height: 56px; }
 .report-table tbody td { vertical-align: middle; }
 </style>

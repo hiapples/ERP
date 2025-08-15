@@ -3,7 +3,7 @@ import InRecord from '../models/in.js'
 
 const router = Router()
 
-// 新增入庫（支援陣列或單筆）
+// 新增入庫（支援陣列或單筆）— price 為整筆總價
 router.post('/', async (req, res) => {
   try {
     const body = req.body
