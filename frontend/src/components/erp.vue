@@ -2,17 +2,16 @@
 import { ref, onMounted, watch, computed } from 'vue'
 import axios from 'axios'
 
-// 同網域部署用 ''；若固定打 Render，填完整網址
-const API = '' // 'https://erp-ahup.onrender.com'
+// 後端同網域部署就留空字串
+const API = ''
 
-// ========== 分頁 ==========
-const currentPage = ref('one')     // one: 入庫, two: 庫存, three: 出庫, four: 報表
+// 頁面分頁
+const currentPage = ref('one')     // one: 入庫 two: 庫存 three: 出庫 four: 報表
 const currentPage2 = ref('one-1')  // 入庫子頁
 const currentPage3 = ref('one-1')  // 出庫子頁
 const currentPage4 = ref('one-1')  // 報表子頁
-const currentPageInv = ref('one-1') // 庫存子頁：one-1=庫存總覽, two-2=品項維護
+const currentPage5 = ref('one-1')  // 庫存子頁（one-1: 庫存總覽 / two-2: 品項設定）
 
-// ========== 日期/查詢 ==========
 const today = new Date().toISOString().split('T')[0]
 const selectedDate = ref(today)
 const selectedDate2 = ref('')
@@ -21,88 +20,75 @@ const selectedDate4 = ref('')
 const selectedDate5 = ref(today)
 const selectedDate6 = ref('')
 
-// ========== 清單 ==========
+// 清單
 const recordList = ref([])
 const recordList2 = ref([])
 
-// 單筆輸入
-const inRow  = ref({ item: '', quantity: '', price: '', note: '' })
+// 單筆輸入（取代 5 列）
+const inRow = ref({ item: '', quantity: '', price: '', note: '' })
 const outRow = ref({ item: '', quantity: '', note: '' })
 
+// 品項管理
+const items = ref([]) // { _id, name, salePrice }
+const newItem = ref({ name: '', salePrice: '' })
+const editingItemId = ref(null)
+
+async function fetchItems () {
+  const { data } = await axios.get(`${API}/items`)
+  items.value = data || []
+  // 更新報表單價（找不到則 fallback 50/60）
+  const cake = items.value.find(i => i.name === '檸檬汁')
+  const juice = items.value.find(i => i.name === '蘋果汁')
+  unitPriceCake.value = cake ? Number(cake.salePrice || 0) : 50
+  unitPriceJuice.value = juice ? Number(juice.salePrice || 0) : 60
+}
+async function addItem () {
+  if (!newItem.value.name) { alert('請輸入品項名稱'); return }
+  await axios.post(`${API}/items`, {
+    name: newItem.value.name,
+    salePrice: Number(newItem.value.salePrice || 0)
+  })
+  newItem.value = { name: '', salePrice: '' }
+  await fetchItems()
+  await fetchRecords3()
+}
+function startEditItem (id) { editingItemId.value = id }
+async function confirmEditItem (itm) {
+  await axios.put(`${API}/items/${itm._id}`, {
+    name: itm.name,
+    salePrice: Number(itm.salePrice || 0)
+  })
+  editingItemId.value = null
+  await fetchItems()
+  await fetchRecords3()
+}
+async function deleteItem (id) {
+  if (!confirm('確定刪除此品項？（既有紀錄不會被刪）')) return
+  await axios.delete(`${API}/items/${id}`)
+  await fetchItems()
+  await fetchRecords3()
+}
+
+// 下拉選單：先用資料庫品項；若還沒建，先顯示預設兩個
+const itemOptions = computed(() =>
+  items.value.length ? items.value.map(i => i.name) : ['檸檬汁', '蘋果汁']
+)
+
 const editingId = ref(null)
-const selectedItem  = ref('')
+const selectedItem = ref('')
 const selectedItem2 = ref('')
 
 const isLoading = ref(false)
 
-// ========== 品項（動態 from DB） ==========
-const items = ref([])             // [{_id, name, salePrice}]
-const itemNames = computed(() => items.value.map(i => i.name))
-
-// 品項維護用
-const newItem = ref({ name: '', salePrice: '' })
-const editingItemId = ref(null)
-
-// 拉取品項
-const fetchItems = async () => {
-  const { data } = await axios.get(`${API}/items`)
-  items.value = data || []
-  // 若目前輸入的品項已不存在，就清掉
-  if (inRow.value.item && !itemNames.value.includes(inRow.value.item))  inRow.value.item = ''
-  if (outRow.value.item && !itemNames.value.includes(outRow.value.item)) outRow.value.item = ''
-  if (selectedItem.value && !itemNames.value.includes(selectedItem.value))   selectedItem.value = ''
-  if (selectedItem2.value && !itemNames.value.includes(selectedItem2.value)) selectedItem2.value = ''
-}
-
-// 新增品項
-const addItem = async () => {
-  const name = (newItem.value.name || '').trim()
-  const salePrice = Number(newItem.value.salePrice)
-  if (!name) { alert('❌ 請輸入品項名稱'); return }
-  if (isNaN(salePrice) || salePrice < 0) { alert('❌ 售價需為 >= 0 的數字'); return }
-  try {
-    await axios.post(`${API}/items`, { name, salePrice })
-    newItem.value = { name: '', salePrice: '' }
-    await fetchItems()
-    // 其他頁同步
-    await fetchRecords3()
-  } catch (e) {
-    alert('❌ 新增失敗：' + (e?.response?.data?.message || e.message))
-  }
-}
-
-// 開始編輯品項
-const startEditItem = (id) => { editingItemId.value = id }
-
-// 確認更新品項（若名稱變更，後端會同步更新所有入/出庫 item）
-const confirmEditItem = async (it) => {
-  const name = (it.name || '').trim()
-  const salePrice = Number(it.salePrice)
-  if (!name) { alert('❌ 品項名稱不可空白'); return }
-  if (isNaN(salePrice) || salePrice < 0) { alert('❌ 售價需為 >= 0 的數字'); return }
-  try {
-    await axios.put(`${API}/items/${it._id}`, { name, salePrice })
-    editingItemId.value = null
-    await fetchItems()
-    // 因為品項可能改名，重新撈庫存/出庫/入庫清單與報表成本
-    await fetchRecords3()
-    if (currentPage.value === 'four') await fetchTotalAmount()
-  } catch (e) {
-    alert('❌ 更新失敗：' + (e?.response?.data?.message || e.message))
-  }
-}
-
-// ========== 報表 ==========
-const totalGroup1 = ref('') // 檸檬汁成本（整筆金額加總）
-const totalGroup2 = ref('') // 蘋果汁成本
-const qtyCake  = ref('')    // 檸檬汁份數
-const qtyJuice = ref('')    // 蘋果汁份數
-
-const unitPriceCake  = 50
-const unitPriceJuice = 60
-const revenueCake  = computed(() => Number(qtyCake.value || 0)  * unitPriceCake)
-const revenueJuice = computed(() => Number(qtyJuice.value || 0) * unitPriceJuice)
-
+// 報表
+const totalGroup1 = ref('')
+const totalGroup2 = ref('')
+const qtyCake = ref('')
+const qtyJuice = ref('')
+const unitPriceCake = ref(50)
+const unitPriceJuice = ref(60)
+const revenueCake = computed(() => Number(qtyCake.value || 0) * Number(unitPriceCake.value || 0))
+const revenueJuice = computed(() => Number(qtyJuice.value || 0) * Number(unitPriceJuice.value || 0))
 const fixedExpense = ref('')
 const extraExpense = ref('')
 const netProfit = computed(() =>
@@ -112,7 +98,7 @@ const netProfit = computed(() =>
   - Number(extraExpense.value || 0)
 )
 
-// ========== 檢核 ==========
+// 檢核
 const isEmpty = (v) => v === '' || v === null || v === undefined
 const isRowCompleteIn = (row) =>
   !!row.item && !isEmpty(row.quantity) && Number(row.quantity) > 0 &&
@@ -147,11 +133,12 @@ const getAvgPrice = (item) => {
   return found ? found.avgPrice : 0
 }
 
-// ========== 建單 ==========
+// 送出入庫（整筆金額）
 const submitIn = async () => {
   const row = inRow.value
   if (!selectedDate.value) { alert('❌ 請選擇日期'); return }
   if (!isRowCompleteIn(row)) { alert('❌ 入庫：品項/數量/價格需填寫（數量>0，價格可為0）'); return }
+
   try {
     const payload = {
       item: row.item,
@@ -169,6 +156,7 @@ const submitIn = async () => {
   }
 }
 
+// 送出出庫（平均單價 × 數量 → 整筆金額）
 const submitOut = async () => {
   const row = outRow.value
   if (!selectedDate3.value) { alert('❌ 請選擇日期'); return }
@@ -195,13 +183,13 @@ const submitOut = async () => {
   }
 }
 
-// ========== 讀資料 ==========
+// 讀資料
 const fetchRecords = async () => {
   try {
     let url = `${API}/records`
     const query = []
     if (selectedDate2.value) query.push('date=' + selectedDate2.value)
-    if (selectedItem.value)  query.push('item=' + encodeURIComponent(selectedItem.value))
+    if (selectedItem.value) query.push('item=' + encodeURIComponent(selectedItem.value))
     if (query.length) url += '?' + query.join('&')
     const { data } = await axios.get(url)
     recordList.value = data
@@ -251,7 +239,7 @@ const fetchTotalAmount = async () => {
   }
 }
 
-// 報表自動帶入
+// 自動帶入報表
 const isAutofilling = ref(false)
 async function loadReportForDate (dateStr) {
   if (!dateStr) return
@@ -259,8 +247,8 @@ async function loadReportForDate (dateStr) {
     const { data } = await axios.get(`${API}/reports/${encodeURIComponent(dateStr)}`)
     isAutofilling.value = true
     if (data) {
-      qtyCake.value   = Number(data?.qtyCake ?? 0)
-      qtyJuice.value  = Number(data?.qtyJuice ?? 0)
+      qtyCake.value = Number(data?.qtyCake ?? 0)
+      qtyJuice.value = Number(data?.qtyJuice ?? 0)
       fixedExpense.value = Number(data?.fixedExpense ?? 0)
       extraExpense.value = Number(data?.extraExpense ?? 0)
     } else {
@@ -308,7 +296,7 @@ function revenuePerItem (qty, unitPrice) { return Number(qty) * unitPrice }
 function storedNet (r) { const n = r?.netProfit; return (n === 0 || (typeof n === 'number' && !Number.isNaN(n))) ? Number(n) : null }
 function computedNet (r) {
   const c = getCosts(r.date)
-  const revenue = revenuePerItem(getQtyCake(r), unitPriceCake) + revenuePerItem(getQtyJuice(r), unitPriceJuice)
+  const revenue = revenuePerItem(getQtyCake(r), Number(unitPriceCake.value)) + revenuePerItem(getQtyJuice(r), Number(unitPriceJuice.value))
   const cost = Number(c.g1) + Number(c.g2)
   const fe = Number(r.fixedExpense || 0)
   const ee = Number(r.extraExpense || 0)
@@ -338,8 +326,9 @@ const confirmEdit2 = async () => {
     alert('❌ 更新失敗：' + err.message)
   }
 }
-const startEditRecord  = (id) => { editingId.value = id }
+const startEditRecord = (id) => { editingId.value = id }
 const startEditRecord2 = (id) => { editingId.value = id }
+
 const deleteRecord = async (id) => {
   if (!confirm('❌ 確定要刪除這筆資料嗎？')) return
   try { await axios.delete(`${API}/records/${id}`); await fetchRecords() }
@@ -351,7 +340,9 @@ const deleteRecord2 = async (id) => {
     const api = currentPage.value === 'three' ? 'outrecords' : 'records'
     await axios.delete(`${API}/${api}/${id}`)
     currentPage.value === 'three' ? await fetchRecords2() : await fetchRecords()
-  } catch (err) { alert('❌ 刪除失敗：' + err.message) }
+  } catch (err) {
+    alert('❌ 刪除失敗：' + err.message)
+  }
 }
 const deleteReportByDate = async (dateStr) => {
   if (!dateStr) return
@@ -365,31 +356,31 @@ const deleteReportByDate = async (dateStr) => {
   }
 }
 
-// ========== 庫存彙總（以整筆金額計算平均單價） ==========
+// 庫存彙總：整筆金額 → 平均單價
 const itemSummary = computed(() => {
   const summary = []
-  for (const item of itemNames.value) {
-    const inRecords  = recordList.value.filter(r  => r.item === item)
-    const inQty      = inRecords.reduce((sum, r) => sum + Number(r.quantity), 0)
+  for (const item of itemOptions.value) {
+    const inRecords = recordList.value.filter(r => r.item === item)
+    const inQty = inRecords.reduce((sum, r) => sum + Number(r.quantity), 0)
     const inSumPrice = inRecords.reduce((sum, r) => sum + Number(r.price), 0)
 
-    const outRecords  = recordList2.value.filter(r => r.item === item)
-    const outQty      = outRecords.reduce((sum, r) => sum + Number(r.quantity), 0)
+    const outRecords = recordList2.value.filter(r => r.item === item)
+    const outQty = outRecords.reduce((sum, r) => sum + Number(r.quantity), 0)
     const outSumPrice = outRecords.reduce((sum, r) => sum + Number(r.price), 0)
 
-    const stockQty        = inQty - outQty
+    const stockQty = inQty - outQty
     const stockTotalPrice = inSumPrice - outSumPrice
-    const avgPrice        = stockQty > 0 ? stockTotalPrice / stockQty : 0
+    const avgPrice = stockQty > 0 ? stockTotalPrice / stockQty : 0
 
     summary.push({ item, quantity: stockQty, avgPrice, totalPrice: stockTotalPrice })
   }
   return summary
 })
 
-const clearIn  = () => { inRow.value  = { item: '', quantity: '', price: '', note: '' } }
+const clearIn = () => { inRow.value = { item: '', quantity: '', price: '', note: '' } }
 const clearOut = () => { outRow.value = { item: '', quantity: '', note: '' } }
 
-// ========== 掛載/監聽 ==========
+// 掛載/監聽
 onMounted(async () => {
   await fetchItems()
   if (currentPage.value === 'two' || currentPage.value === 'three') fetchRecords3()
@@ -398,26 +389,24 @@ onMounted(async () => {
 })
 
 watch(
-  [selectedDate, selectedDate2, selectedDate3, selectedDate4, selectedDate5, selectedDate6, selectedItem, selectedItem2, currentPage, currentPageInv],
-  async () => {
-    if (currentPage.value === 'two') {
-      if (currentPageInv.value === 'one-1') await fetchRecords3()
-      // 進到品項維護頁時，確保品項最新
-      if (currentPageInv.value === 'two-2') await fetchItems()
-    } else if (currentPage.value === 'three') {
-      await fetchRecords3()
-    } else if (currentPage.value === 'four') {
-      await fetchTotalAmount()
-      if (selectedDate5.value) await loadReportForDate(selectedDate5.value)
-    } else {
-      await fetchRecords()
-    }
+  [selectedDate, selectedDate2, selectedDate3, selectedDate4, selectedDate5, selectedDate6, selectedItem, selectedItem2, currentPage],
+  () => {
+    if (currentPage.value === 'two' || currentPage.value === 'three') fetchRecords3()
+    else if (currentPage.value === 'four') { fetchTotalAmount(); if (selectedDate5.value) loadReportForDate(selectedDate5.value) }
+    else { fetchRecords() }
   },
   { immediate: true }
 )
 
 watch(currentPage4, (p) => {
   if (currentPage.value === 'four' && p === 'two-2') fetchReportsList()
+})
+
+// 庫存子頁切換（與其他頁相同風格）
+watch(currentPage5, (p) => {
+  if (currentPage.value !== 'two') return
+  if (p === 'one-1') fetchRecords3()
+  if (p === 'two-2') fetchItems()
 })
 
 // 報表規則（成本為 0 時，份數不可 > 0）
@@ -440,6 +429,7 @@ const submitReport = async () => {
   if (!mustNumber(qtyCake.value) || !mustNumber(qtyJuice.value) || !mustNumber(fixedExpense.value) || !mustNumber(extraExpense.value)) {
     alert('❌ 請完整填寫數字（可為 0）'); return
   }
+
   if (Number(totalGroup1.value || 0) === 0 && Number(qtyCake.value) > 0) { alert('❌ 檸檬汁成本為 0，份數必須為 0'); qtyCake.value = 0; return }
   if (Number(totalGroup2.value || 0) === 0 && Number(qtyJuice.value) > 0) { alert('❌ 蘋果汁成本為 0，份數必須為 0'); qtyJuice.value = 0; return }
 
@@ -451,6 +441,7 @@ const submitReport = async () => {
     extraExpense: Number(extraExpense.value || 0),
     netProfit: Number(netProfit.value || 0)
   }
+
   try {
     await axios.post(`${API}/reports`, payload)
     alert('✅ 報表已送出')
@@ -463,110 +454,499 @@ const submitReport = async () => {
 <template>
   <!-- 上方選單 -->
   <div class="d-flex justify-content-around">
-    <div class="item p-3 text-center" :class="{ active: currentPage === 'one' }"   @click="() => { currentPage = 'one'; currentPage2 = 'one-1' }">入庫</div>
-    <div class="item p-3 text-center" :class="{ active: currentPage === 'two' }"   @click="() => { currentPage = 'two'; currentPageInv = 'one-1' }">庫存</div>
+    <div class="item p-3 text-center" :class="{ active: currentPage === 'one' }" @click="() => { currentPage = 'one'; currentPage2 = 'one-1' }">入庫</div>
+    <div class="item p-3 text-center" :class="{ active: currentPage === 'two' }" @click="() => { currentPage = 'two'; currentPage5 = 'one-1' }">庫存</div>
     <div class="item p-3 text-center" :class="{ active: currentPage === 'three' }" @click="() => { currentPage = 'three'; currentPage3 = 'one-1'; fetchRecords3() }">出庫</div>
-    <div class="item p-3 text-center" :class="{ active: currentPage === 'four' }"  @click="() => { currentPage = 'four' ; currentPage4 = 'one-1'}">報表</div>
+    <div class="item p-3 text-center" :class="{ active: currentPage === 'four' }" @click="() => { currentPage = 'four' ;currentPage4 = 'one-1'}">報表</div>
   </div>
 
   <div class="page-content mt-4">
-    <!-- 入庫（略：內容與你前一版相同） -->
-    <!-- ... 這一段與你提供的版本相同，已在 <script> 區維持功能 ... -->
+    <!-- 入庫 -->
+    <div v-if="currentPage === 'one'">
+      <div v-if="currentPage2 === 'one-1'">
+        <div class="d-flex justify-content-center align-items-center">
+          <button style="min-width: 330px;" class="btn mb-3" :class="{ active: currentPage2 === 'two-2' }" @click="() => { currentPage2 = 'two-2'; fetchRecords() }">入庫總覽</button>
+        </div>
 
-    <!-- 庫存 -->
-    <div v-if="currentPage === 'two'">
-      <!-- 子頁切換 -->
-      <div class="d-flex justify-content-center align-items-center">
-        <button style="min-width: 330px;" class="btn mb-3" :class="{ active: currentPageInv === 'one-1' }" @click="currentPageInv = 'one-1'">庫存總覽</button>
-        <button style="min-width: 330px;" class="btn mb-3 ms-2" :class="{ active: currentPageInv === 'two-2' }" @click="() => { currentPageInv = 'two-2'; fetchItems() }">品項維護</button>
-      </div>
-
-      <!-- 庫存總覽 -->
-      <div v-if="currentPageInv === 'one-1'" class="form-wrapper">
-        <h5 class="title">庫存總覽</h5>
-
-        <div v-if="isLoading" style="font-size: 14px; color: #888;">載入中...</div>
-
-        <div v-else>
-          <div v-if="itemSummary.length > 0" style="font-size: 14px;">
-            <table class="table">
-              <thead>
-                <tr>
-                  <th>品項</th>
-                  <th>數量</th>
-                  <th>平均單價</th>
-                  <th>總價</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(record, index) in itemSummary" :key="index">
-                  <td>{{ record.item }}</td>
-                  <td>{{ Number(record.quantity).toFixed(2) }}</td>
-                  <td>{{ Number(record.avgPrice).toFixed(2) }}</td>
-                  <td>{{ Number(record.totalPrice).toFixed(2) }}</td>
-                </tr>
-              </tbody>
-            </table>
+        <div class="form-wrapper">
+          <h5 class="title">商品入庫</h5>
+          <div class="d-flex justify-content-center mt-3">
+            <div class="d-flex align-items-center gap-3 mb-3" style="width: 100%; max-width: 330px;">
+              <div style="font-size:14px; white-space: nowrap;">日期&ensp;:</div>
+              <input type="date" v-model="selectedDate" class="form-control" style="min-height: 42px;  min-width: 0; flex: 1;" />
+            </div>
           </div>
-          <div v-else style="font-size: 14px; color: #888;">
-            目前無資料
+
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>品項</th>
+                <th>數量</th>
+                <th>整筆價格</th>
+                <th>備註</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><div class="clear" @click="clearIn" type="button">空</div></td>
+                <td class="items">
+                  <select v-model="inRow.item">
+                    <option v-for="option in itemOptions" :key="option" :value="option">{{ option }}</option>
+                  </select>
+                </td>
+                <td><input type="number" class="qty" v-model.number="inRow.quantity" min="0.01" step="0.01" /></td>
+                <td><input type="number" class="price" v-model.number="inRow.price" min="0" step="0.01" /></td>
+                <td><input class="note" v-model="inRow.note" /></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="d-flex justify-content-end">
+            <button class="btn text-center ms-2" @click="submitIn">送出</button>
           </div>
         </div>
       </div>
 
-      <!-- 品項維護 -->
-      <div v-else-if="currentPageInv === 'two-2'" class="form-wrapper">
-        <h5 class="title">品項維護</h5>
-
-        <!-- 新增 -->
-        <div class="d-flex justify-content-center align-items-center gap-3 mb-3" style="max-width: 600px; margin: 0 auto;">
-          <input v-model="newItem.name" placeholder="品項名稱（例：檸檬汁）" class="form-control" />
-          <input v-model.number="newItem.salePrice" type="number" min="0" step="0.01" placeholder="售價" class="form-control" style="max-width: 160px;" />
-          <button class="btn" style="min-width: 120px;" @click="addItem">新增品項</button>
+      <div v-else-if="currentPage2 === 'two-2'">
+        <div class="d-flex justify-content-center align-items-center">
+          <button style="min-width: 330px;" class="btn mb-3" :class="{ active: currentPage2 === 'one-1' }" @click="currentPage2 = 'one-1'">新增入庫</button>
         </div>
 
-        <!-- 列表 -->
-        <table class="table">
-          <thead>
-            <tr>
-              <th>品項名稱</th>
-              <th>售價</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="it in items" :key="it._id">
-              <td class="items">
-                <template v-if="editingItemId === it._id">
-                  <input v-model="it.name" />
-                </template>
-                <template v-else>{{ it.name }}</template>
-              </td>
-              <td class="price">
-                <template v-if="editingItemId === it._id">
-                  <input type="number" v-model.number="it.salePrice" min="0" step="0.01" />
-                </template>
-                <template v-else>{{ Number(it.salePrice).toFixed(2) }}</template>
-              </td>
-              <td class="text-center">
-                <template v-if="editingItemId === it._id">
-                  <button class="update-btn" @click="confirmEditItem(it)">確認</button>
-                </template>
-                <template v-else>
-                  <button class="update-btn" @click="startEditItem(it._id)">改</button>
-                </template>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="form-wrapper">
+          <h5 class="title">入庫總覽查詢</h5>
 
-        <div style="font-size:12px; color:#666;">＊修改名稱後，所有入庫/出庫紀錄會同步改用新名稱。</div>
+          <div class="d-flex justify-content-center mt-3">
+            <div class="d-flex align-items-center gap-3" style="width: 100%; max-width: 330px;">
+              <div style="font-size:14px; white-space: nowrap;">日期&ensp;:</div>
+              <input type="date" v-model="selectedDate2" class="form-control" style="min-height: 42px;  min-width: 0; flex: 1;" />
+            </div>
+          </div>
+
+          <div class="d-flex justify-content-center mt-3 mb-3">
+            <div class="d-flex align-items-center gap-3" style="width: 100%; max-width: 330px;">
+              <div style="font-size:14px; white-space: nowrap;">品項&ensp;:</div>
+              <select v-model="selectedItem" style="min-height: 42px; font-size: 14px; min-width: 0; flex: 1;">
+                <option value=""></option>
+                <option v-for="option in itemOptions" :key="option" :value="option">{{ option }}</option>
+              </select>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>品項</th>
+                <th>數量</th>
+                <th>整筆價格</th>
+                <th>備註</th>
+                <th v-if="!editingId">日期</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="record in recordList" :key="record._id">
+                <td class="button">
+                  <template v-if="editingId === record._id">
+                    <button class="delete-btn" @click="deleteRecord(record._id)">刪</button>
+                  </template>
+                  <template v-else>
+                    <button class="update-btn" @click="startEditRecord(record._id)">改</button>
+                  </template>
+                </td>
+
+                <td class="items">
+                  <template v-if="editingId === record._id">
+                    <select v-model="record.item">
+                      <option v-for="option in itemOptions" :key="option" :value="option">{{ option }}</option>
+                    </select>
+                  </template>
+                  <template v-else>{{ record.item }}</template>
+                </td>
+
+                <td class="qty">
+                  <template v-if="editingId === record._id">
+                    <input type="number" v-model.number="record.quantity" min="0.01" step="0.01" />
+                  </template>
+                  <template v-else>{{ Number(record.quantity).toFixed(2) }}</template>
+                </td>
+
+                <td class="price">
+                  <template v-if="editingId === record._id">
+                    <input type="number" v-model.number="record.price" min="0" step="0.01" />
+                  </template>
+                  <template v-else>{{ Number(record.price).toFixed(2) }}</template>
+                </td>
+
+                <td class="note">
+                  <template v-if="editingId === record._id">
+                    <input v-model="record.note" />
+                  </template>
+                  <template v-else>{{ record.note }}</template>
+                </td>
+
+                <td>
+                  <div style="display: flex; align-items: center; gap: 6px; justify-content: center;">
+                    <template v-if="editingId === record._id">
+                      <button class="update-btn" style="padding: 6px 10px;" @click="confirmEdit">確認</button>
+                    </template>
+                    <template v-else>{{ record.date }}</template>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+        </div>
       </div>
     </div>
 
-    <!-- 出庫（含你先前改的：總覽查詢的價格欄位 disabled） -->
-    <!-- 報表（維持原本規則） -->
-    <!-- 入庫/出庫/報表其他區塊沿用你上一版的 template，這裡為精簡不重複貼出 -->
+    <!-- 庫存（與入庫/出庫同樣的切換樣式） -->
+    <div v-else-if="currentPage === 'two'">
+      <div v-if="currentPage5 === 'one-1'">
+        <div class="d-flex justify-content-center align-items-center">
+          <button style="min-width:330px;" class="btn mb-3" :class="{ active: currentPage5 === 'two-2' }" @click="() => { currentPage5 = 'two-2'; fetchItems() }">品項設定</button>
+        </div>
+
+        <div class="form-wrapper">
+          <h5 class="title">庫存總覽</h5>
+
+          <div v-if="isLoading" style="font-size: 14px; color: #888;">載入中...</div>
+
+          <div v-else>
+            <div v-if="itemSummary.length > 0" style="font-size: 14px;">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>品項</th>
+                    <th>數量</th>
+                    <th>平均單價</th>
+                    <th>總價</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(record, index) in itemSummary" :key="index">
+                    <td>{{ record.item }}</td>
+                    <td>{{ Number(record.quantity).toFixed(2) }}</td>
+                    <td>{{ Number(record.avgPrice).toFixed(2) }}</td>
+                    <td>{{ Number(record.totalPrice).toFixed(2) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div v-else style="font-size: 14px; color: #888;">目前無資料</div>
+          </div>
+        </div>
+      </div>
+
+      <div v-else-if="currentPage5 === 'two-2'">
+        <div class="d-flex justify-content-center align-items-center">
+          <button style="min-width:330px;" class="btn mb-3" :class="{ active: currentPage5 === 'one-1' }" @click="currentPage5 = 'one-1'">庫存總覽</button>
+        </div>
+
+        <div class="form-wrapper">
+          <h5 class="title">品項設定</h5>
+
+          <table>
+            <thead>
+              <tr>
+                <th>品項名稱</th>
+                <th>售價（報表單價）</th>
+                <th style="width:120px;"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="itm in items" :key="itm._id">
+                <td>
+                  <template v-if="editingItemId === itm._id">
+                    <input v-model="itm.name" />
+                  </template>
+                  <template v-else>{{ itm.name }}</template>
+                </td>
+                <td>
+                  <template v-if="editingItemId === itm._id">
+                    <input type="number" v-model.number="itm.salePrice" min="0" step="1" />
+                  </template>
+                  <template v-else>{{ Number(itm.salePrice).toFixed(0) }}</template>
+                </td>
+                <td>
+                  <template v-if="editingItemId === itm._id">
+                    <button class="update-btn" @click="confirmEditItem(itm)">存</button>
+                  </template>
+                  <template v-else>
+                    <button class="update-btn" @click="startEditItem(itm._id)">改</button>
+                    <button class="delete-btn" style="margin-left:6px" @click="deleteItem(itm._id)">刪</button>
+                  </template>
+                </td>
+              </tr>
+              <tr>
+                <td><input v-model="newItem.name" placeholder="新增品項（例：檸檬汁）" /></td>
+                <td><input type="number" v-model.number="newItem.salePrice" min="0" step="1" placeholder="售價" /></td>
+                <td><button class="update-btn" @click="addItem">新增</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 出庫 -->
+    <div v-if="currentPage === 'three'">
+      <div v-if="currentPage3 === 'one-1'">
+        <div class="d-flex justify-content-center align-items-center">
+          <button style="min-width: 330px;" class="btn mb-3" :class="{ active: currentPage3 === 'two-2' }" @click="() => { currentPage3 = 'two-2'; fetchRecords2() }">出庫總覽</button>
+        </div>
+
+        <div class="form-wrapper">
+          <h5 class="title">商品出庫</h5>
+
+          <div class="d-flex justify-content-center mt-3">
+            <div class="d-flex align-items-center gap-3 mb-3" style="width: 100%; max-width: 330px;">
+              <div style="font-size:14px; white-space: nowrap;">日期&ensp;:</div>
+              <input type="date" v-model="selectedDate3" class="form-control" style="min-height: 42px;  min-width: 0; flex: 1;" />
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>品項</th>
+                <th>數量</th>
+                <th>平均單價</th>
+                <th>備註</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><div type="button" class="clear" @click="clearOut">空</div></td>
+                <td class="items">
+                  <select v-model="outRow.item">
+                    <option v-for="option in itemOptions" :key="option" :value="option">{{ option }}</option>
+                  </select>
+                </td>
+                <td><input type="number" class="qty" v-model.number="outRow.quantity" min="0.01" step="0.01" /></td>
+                <td><div class="price-text">{{ getAvgPrice(outRow.item).toFixed(2) }}</div></td>
+                <td><input class="note" v-model="outRow.note" /></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="d-flex justify-content-end">
+            <button class="btn text-center ms-2" @click="submitOut">送出</button>
+          </div>
+        </div>
+      </div>
+
+      <div v-else-if="currentPage3 === 'two-2'">
+        <div class="d-flex justify-content-center align-items-center">
+          <button style="min-width: 330px;" class="btn mb-3" :class="{ active: currentPage3 === 'one-1' }" @click="currentPage3 = 'one-1'">新增出庫</button>
+        </div>
+
+        <div class="form-wrapper">
+          <h5 class="title">出庫總覽查詢</h5>
+
+          <div class="d-flex justify-content-center mt-3">
+            <div class="d-flex align-items-center gap-3" style="width: 100%; max-width: 330px;">
+              <div style="font-size:14px; white-space: nowrap;">日期&ensp;:</div>
+              <input type="date" v-model="selectedDate4" class="form-control" style="min-height: 42px;  min-width: 0; flex: 1;" />
+            </div>
+          </div>
+
+          <div class="d-flex justify-content-center mt-3">
+            <div class="d-flex align-items-center gap-3 mb-3" style="width: 100%; max-width: 330px;">
+              <div style="font-size:14px; white-space: nowrap;">品項&ensp;:</div>
+              <select v-model="selectedItem2" style="min-height: 42px; font-size: 14px; min-width: 0; flex: 1;">
+                <option value=""></option>
+                <option v-for="option in itemOptions" :key="option" :value="option">{{ option }}</option>
+              </select>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>品項</th>
+                <th>數量</th>
+                <th>整筆價格</th>
+                <th>備註</th>
+                <th v-if="!editingId">日期</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="record in recordList2" :key="record._id">
+                <td class="button">
+                  <template v-if="editingId === record._id">
+                    <button class="delete-btn" @click="deleteRecord2(record._id)">刪</button>
+                  </template>
+                  <template v-else>
+                    <button class="update-btn" @click="startEditRecord2(record._id)">改</button>
+                  </template>
+                </td>
+
+                <td class="items">
+                  <template v-if="editingId === record._id">
+                    <select v-model="record.item">
+                      <option v-for="option in itemOptions" :key="option" :value="option">{{ option }}</option>
+                    </select>
+                  </template>
+                  <template v-else>{{ record.item }}</template>
+                </td>
+
+                <td class="qty">
+                  <template v-if="editingId === record._id">
+                    <input type="number" v-model.number="record.quantity" min="0.01" step="0.01" />
+                  </template>
+                  <template v-else>{{ Number(record.quantity).toFixed(2) }}</template>
+                </td>
+
+                <td class="price">
+                  <template v-if="editingId === record._id">
+                    <!-- 只顯示，不允許輸入 -->
+                    <input type="number" v-model.number="record.price" min="0" step="0.01" disabled />
+                  </template>
+                  <template v-else>{{ Number(record.price).toFixed(2) }}</template>
+                </td>
+
+                <td class="note">
+                  <template v-if="editingId === record._id">
+                    <input v-model="record.note" />
+                  </template>
+                  <template v-else>{{ record.note }}</template>
+                </td>
+
+                <td>
+                  <div style="display: flex; align-items: center; gap: 6px; justify-content: center;">
+                    <template v-if="editingId === record._id">
+                      <button class="update-btn" style="padding: 6px 10px;" @click="confirmEdit2">確認</button>
+                    </template>
+                    <template v-else>{{ record.date }}</template>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- 報表 -->
+    <div v-if="currentPage === 'four'">
+      <div v-if="currentPage4 === 'one-1'">
+        <div class="d-flex justify-content-center align-items-center">
+          <button style="min-width: 330px;" class="btn mb-3" :class="{ active: currentPage4 === 'two-2' }" @click="() => { currentPage4 = 'two-2'; fetchReportsList() }">報表總覽</button>
+        </div>
+
+        <div class="form-wrapper">
+          <h5 class="title">報表紀錄</h5>
+
+          <div class="d-flex justify-content-center mt-3">
+            <div class="d-flex align-items-center gap-3 mb-3" style="width: 100%; max-width: 330px;">
+              <div style="font-size:14px; white-space: nowrap;">日期&ensp;:</div>
+              <input type="date" v-model="selectedDate5" class="form-control" style="min-height: 42px;  min-width: 0; flex: 1;" />
+            </div>
+          </div>
+
+          <table class="text-center align-middle">
+            <thead>
+              <tr>
+                <th>品項</th>
+                <th>份數 × 單價</th>
+                <th>營業收入</th>
+                <th>銷貨成本</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>檸檬汁</td>
+                <td class="d-flex justify-content-center align-items-center gap-2">
+                  <input v-model.number="qtyCake" type="number" min="0" step="1" class="form-control text-center report" style="display: inline-block;" />
+                  <span>× {{ unitPriceCake }}</span>
+                </td>
+                <td>{{ revenueCake }}</td>
+                <td>{{ totalGroup1 === '' ? '' : Number(totalGroup1).toFixed(2) }}</td>
+              </tr>
+
+              <tr>
+                <td>蘋果汁</td>
+                <td class="d-flex justify-content-center align-items-center gap-2">
+                  <input v-model.number="qtyJuice" type="number" min="0" step="1" class="form-control text-center report" style="display: inline-block;" />
+                  <span>× {{ unitPriceJuice }}</span>
+                </td>
+                <td>{{ revenueJuice }}</td>
+                <td>{{ totalGroup2 === '' ? '' : Number(totalGroup2).toFixed(2) }}</td>
+              </tr>
+
+              <tr><td>&ensp;</td><td>&ensp;</td><td>&ensp;</td><td>&ensp;</td></tr>
+
+              <tr class="total-row">
+                <td>總計</td>
+                <td></td>
+                <td>{{ (revenueCake + revenueJuice).toFixed(0) }}</td>
+                <td>
+                  {{
+                    (totalGroup1 === '' && totalGroup2 === '')
+                      ? ''
+                      : (Number(totalGroup1 || 0) + Number(totalGroup2 || 0)).toFixed(2)
+                  }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="d-flex justify-content-center align-items-center gap-3 mt-3">
+            <label>固定支出：</label>
+            <input v-model.number="fixedExpense" type="number" min="0" step="1" class="form-control text-center report2" />
+          </div>
+          <div class="d-flex justify-content-center align-items-center gap-3 mt-2">
+            <label>額外支出：</label>
+            <input v-model.number="extraExpense" type="number" min="0" step="1" class="form-control text-center report2" />
+          </div>
+          <div class="d-flex justify-content-center align-items-center gap-3 mt-2">
+            <div class="fw-bold">淨利：</div>
+            <div>{{ netProfit.toFixed(2) }}</div>
+          </div>
+
+          <div class="d-flex justify-content-center mt-3">
+            <button class="btn" style="min-width: 200px;" @click="submitReport">送出報表</button>
+          </div>
+        </div>
+      </div>
+
+      <div v-else-if="currentPage4 === 'two-2'">
+        <div class="d-flex justify-content-center align-items-center">
+          <button style="min-width: 330px;" class="btn mb-3" :class="{ active: currentPage4 === 'one-1' }" @click="currentPage4 = 'one-1'">報表紀錄</button>
+        </div>
+
+        <div class="form-wrapper">
+          <h5 class="title">報表總攬</h5>
+
+          <div v-if="isReportsLoading" style="font-size: 14px; color: #888;">載入中...</div>
+
+          <div v-else>
+            <div v-if="reportList.length > 0" style="font-size: 14px;">
+              <table class="table report-table">
+                <thead>
+                  <tr><th>日期</th><th>淨利</th><th></th></tr>
+                </thead>
+                <tbody>
+                  <tr v-for="r in reportList" :key="r._id">
+                    <td>{{ r.date }}</td>
+                    <td>{{ dailyNet(r).toFixed(2) }}</td>
+                    <td class="text-center">
+                      <button class="delete-btn" @click="deleteReportByDate(r.date)">刪</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div v-else style="font-size: 14px; color: #888;">目前無資料</div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -575,7 +955,7 @@ const submitReport = async () => {
 .item.active { background-color: #6c6d6e; color: #fff; }
 .page-content { padding: 20px; min-height: 200px; text-align: center; font-size: 1.2rem; }
 input[type="date"] { padding: 8px 24px; font-size: 1rem; border:1px solid #ccc; border-radius: 4px; width: 50%; }
-.btn { background-color:#b2afaf; padding:10px; border-radius:4px; cursor:pointer; transition: background-color .2s; font-size:12px; white-space:nowrap; }
+.btn { background-color:#b2afaf; padding:10px; border-radius:4px; cursor:pointer; transition: background-color .2s; font-size:12px; width:20%; white-space:nowrap; }
 .btn:hover { background-color:#6c6d6e; color:#fff; }
 .form-wrapper { max-width:800px; margin:20px auto; padding:10px; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,.1); }
 table { width:100%; border-collapse:collapse; margin-bottom:16px; }
@@ -585,8 +965,9 @@ input { width:100%; padding:4px; box-sizing:border-box; border:1px solid #ccc; b
 .update-btn { border:none; font-size:8px; cursor:pointer; border-radius:15px; background:#1d35d0; color:#fff; padding:6px; }
 select { width:100%; border:1px solid #ccc; border-radius:4px; box-sizing:border-box; }
 td select, td input { min-height:30px; }
-.items{ min-width:100px; }
+.items{ min-width:80px; }
 .qty, .price, .price-text, .note { min-width:60px; }
+.button{ max-width:20px; padding-left:0!important; padding-right:25px!important; }
 input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
 .title{ color:#f00; margin-bottom:1rem; }
 .clear{ border:none; font-size:8px; cursor:pointer; border-radius:15px; background:#1d35d0; color:#fff; padding:6px; }

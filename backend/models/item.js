@@ -3,12 +3,10 @@ import mongoose from 'mongoose'
 
 const ItemSchema = new mongoose.Schema(
   {
-    name: { type: String, required: true, unique: true, index: true },
-    salePrice: { type: Number, required: true, default: 0 }, // 售價
+    name: { type: String, required: true, unique: true },  // 例：檸檬汁
+    salePrice: { type: Number, default: 0 }                // 報表單價
   },
   { timestamps: true }
 )
 
-ItemSchema.index({ name: 1 }, { unique: true })
-
-export default mongoose.models.Item || mongoose.model('Item', ItemSchema)
+export default mongoose.model('Item', ItemSchema)

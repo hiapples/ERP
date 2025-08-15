@@ -1,52 +1,43 @@
+// backend/routes/report.js
 import { Router } from 'express'
 import Report from '../models/report.js'
 
 const router = Router()
 
-// 建立/更新（同一天覆蓋）
-router.post('/', async (req, res) => {
-  try {
-    const { date, ...rest } = req.body
-    if (!date) return res.status(400).json({ error: 'date is required' })
-    const doc = await Report.findOneAndUpdate(
-      { date },
-      { date, ...rest },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    )
-    res.json({ ok: true, _id: doc._id })
-  } catch (e) {
-    res.status(400).json({ error: e.message })
-  }
-})
-
-// 取得全部
+// 列表
 router.get('/', async (_req, res) => {
-  try {
-    const list = await Report.find({}).sort({ date: -1 })
-    res.json(list)
-  } catch (e) {
-    res.status(500).json({ error: e.message })
-  }
+  const list = await Report.find({}).sort({ date: -1 })
+  res.json(list)
 })
 
-// 取得單日
+// 讀單日
 router.get('/:date', async (req, res) => {
-  try {
-    const doc = await Report.findOne({ date: req.params.date })
-    res.json(doc || null)
-  } catch (e) {
-    res.status(500).json({ error: e.message })
-  }
+  const doc = await Report.findOne({ date: req.params.date })
+  res.json(doc || null)
 })
 
-// 刪除單日
+// 新增/覆蓋（依 date upsert）
+router.post('/', async (req, res) => {
+  const { date, qtyCake, qtyJuice, fixedExpense, extraExpense, netProfit } = req.body
+  const doc = await Report.findOneAndUpdate(
+    { date },
+    {
+      date,
+      qtyCake: Number(qtyCake || 0),
+      qtyJuice: Number(qtyJuice || 0),
+      fixedExpense: Number(fixedExpense || 0),
+      extraExpense: Number(extraExpense || 0),
+      netProfit: Number(netProfit || 0)
+    },
+    { new: true, upsert: true }
+  )
+  res.json({ ok: true, id: doc._id })
+})
+
+// 依日期刪除
 router.delete('/:date', async (req, res) => {
-  try {
-    await Report.findOneAndDelete({ date: req.params.date })
-    res.json({ ok: true })
-  } catch (e) {
-    res.status(400).json({ error: e.message })
-  }
+  await Report.findOneAndDelete({ date: req.params.date })
+  res.json({ ok: true })
 })
 
 export default router

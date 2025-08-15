@@ -6,10 +6,11 @@ import dotenv from 'dotenv'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
-import In from './routes/in.js'
-import Out from './routes/out.js'
+// 路由
+import InRoutes from './routes/in.js'
+import OutRoutes from './routes/out.js'
 import ReportRoutes from './routes/report.js'
-import ItemsRoutes from './routes/item.js'   // ⬅️ 新增：items 路由
+import ItemRoutes from './routes/item.js'
 
 dotenv.config()
 
@@ -17,25 +18,24 @@ const app = express()
 app.use(cors())
 app.use(express.json())
 
-// --- API (先掛 API 路由) ---
-app.get('/health', (_req, res) => {
-  res.json({ ok: true })
-})
-app.use('/records', In)
-app.use('/outrecords', Out)
-app.use('/reports', ReportRoutes)
-app.use('/items', ItemsRoutes)               // ⬅️ 新增：/items
+// 健康檢查
+app.get('/health', (_req, res) => res.json({ ok: true }))
 
-// --- 靜態檔案 (前端打包後的 dist) ---
+// 掛 API 路由
+app.use('/records', InRoutes)
+app.use('/outrecords', OutRoutes)
+app.use('/reports', ReportRoutes)
+app.use('/items', ItemRoutes)
+
+// ---- 靜態檔案（production 同站服務前端） ----
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const clientDist = path.resolve(__dirname, '../frontend/dist')
 
-// 提供 /assets/*、/index.html 等靜態檔案
 app.use(express.static(clientDist))
 
-// SPA fallback：把非 API 的路由都回傳 index.html，讓前端路由接手
-app.get('*', (_req, res) => {
+// SPA fallback（避免吃到 API 路由）
+app.get('*', (req, res) => {
   res.sendFile(path.join(clientDist, 'index.html'))
 })
 
@@ -57,9 +57,5 @@ mongoose
   })
 
 process.on('SIGINT', async () => {
-  try {
-    await mongoose.connection.close()
-  } finally {
-    process.exit(0)
-  }
+  try { await mongoose.connection.close() } finally { process.exit(0) }
 })
