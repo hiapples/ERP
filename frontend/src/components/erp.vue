@@ -37,6 +37,60 @@ async function fetchItems () {
   const { data } = await axios.get(`${API}/items`)
   items.value = data || []
 }
+// ── 品項 CRUD（補上這四個方法） ──
+const startEditItem = (id) => {
+  editingItemId.value = id
+}
+
+const confirmEditItem = async (itm) => {
+  const name = (itm.name || '').trim()
+  if (!name) { alert('❌ 請輸入品項名稱'); return }
+  try {
+    await axios.put(`${API}/items/${itm._id}`, {
+      name,
+      salePrice: Number(itm.salePrice || 0)
+    })
+    editingItemId.value = null
+    await fetchItems()         // 重新取得品項
+    ensureQtyMapSync()         // 與報表份數欄同步
+  } catch (e) {
+    alert('❌ 更新失敗：' + (e?.response?.data?.error || e.message))
+  }
+}
+
+const addItem = async () => {
+  const name = (newItem.value.name || '').trim()
+  if (!name) { alert('❌ 請輸入品項名稱'); return }
+  if (items.value.some(i => i.name === name)) {
+    alert('❌ 品項名稱重複'); return
+  }
+  try {
+    await axios.post(`${API}/items`, {
+      name,
+      salePrice: Number(newItem.value.salePrice || 0)
+    })
+    newItem.value = { name: '', salePrice: '' }
+    await fetchItems()
+    ensureQtyMapSync()
+  } catch (e) {
+    alert('❌ 新增失敗：' + (e?.response?.data?.error || e.message))
+  }
+}
+
+const deleteItem = async (id) => {
+  const itm = items.value.find(i => i._id === id)
+  if (!confirm(`確定要刪除「${itm?.name || ''}」嗎？`)) return
+  try {
+    await axios.delete(`${API}/items/${id}`)
+    await fetchItems()
+    ensureQtyMapSync()
+    // 若入庫/出庫表單正選到被刪除的品項，順手清掉避免殘值
+    if (inRow.value.item === itm?.name) inRow.value.item = ''
+    if (outRow.value.item === itm?.name) outRow.value.item = ''
+  } catch (e) {
+    alert('❌ 刪除失敗：' + (e?.response?.data?.error || e.message))
+  }
+}
 
 // 下拉清單
 const itemOptions = computed(() => items.value.map(i => i.name))
