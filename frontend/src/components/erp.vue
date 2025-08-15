@@ -3,7 +3,7 @@ import { ref, onMounted, watch, computed } from 'vue'
 import axios from 'axios'
 
 // 若前後端同網域部署，用空字串；不同網域就填完整網址
-const API = '' // e.g. 'https://erp-ahup.onrender.com'
+const API = '' // 例如 'https://erp-ahup.onrender.com'
 
 // 分頁
 const currentPage = ref('one')     // one: 入庫, two: 庫存(+品項設定), three: 出庫, four: 報表
@@ -223,6 +223,7 @@ const deleteRecord2 = async (id) => {
 
 // === 品項管理（庫存第2頁） ===
 const itemEditingId = ref(null)
+// ✅ 這裡是 ref 物件，在 template 內直接用 newItem.name / newItem.salePrice
 const newItem = ref({ name: '', salePrice: '' })
 
 const addItem = async () => {
@@ -424,7 +425,7 @@ watch(currentPage4, async (p) => {
     <div class="item p-3 text-center" :class="{ active: currentPage === 'one' }"   @click="() => { currentPage = 'one'; currentPage2 = 'one-1' }">入庫</div>
     <div class="item p-3 text-center" :class="{ active: currentPage === 'two' }"   @click="() => { currentPage = 'two'; currentPageStock = 'one-1' }">庫存</div>
     <div class="item p-3 text-center" :class="{ active: currentPage === 'three' }" @click="() => { currentPage = 'three'; currentPage3 = 'one-1'; fetchRecords3() }">出庫</div>
-    <div class="item p-3 text-center" :class="{ active: currentPage === 'four' }"  @click="() => { currentPage = 'four' ; currentPage4 = 'one-1'; fetchTotalAmount(); loadReportForDate(selectedDate5) }">報表</div>
+    <div class="item p-3 text-center" :class="{ active: currentPage === 'four' }"  @click="() => { currentPage = 'four' ; currentPage4 = 'one-1'; fetchTotalAmount(); loadReportForDate(selectedDate5.value) }">報表</div>
   </div>
 
   <div class="page-content mt-4">
@@ -601,9 +602,10 @@ watch(currentPage4, async (p) => {
               </td>
             </tr>
 
+            <!-- ✅ 這裡改正：不要用 newItem.value，在模板直接用 newItem.name / newItem.salePrice -->
             <tr>
-              <td><input placeholder="新名稱" v-model="newItem.value?.name" @input="(e)=>newItem.value.name=e.target.value" /></td>
-              <td><input type="number" step="0.01" min="0" placeholder="售價" v-model.number="newItem.value?.salePrice" @input="(e)=>newItem.value.salePrice=e.target.value" /></td>
+              <td><input placeholder="新名稱" v-model="newItem.name" /></td>
+              <td><input type="number" step="0.01" min="0" placeholder="售價" v-model.number="newItem.salePrice" /></td>
               <td class="text-center"><button class="update-btn" @click="addItem">新增</button></td>
             </tr>
           </tbody>
@@ -657,7 +659,7 @@ watch(currentPage4, async (p) => {
         <div class="form-wrapper">
           <h5 class="title">出庫總覽查詢</h5>
 
-          <div class="d-flex justify-content中心 mt-3">
+          <div class="d-flex justify-content-center mt-3">
             <div class="d-flex align-items-center gap-3" style="width:100%;max-width:330px;">
               <div style="font-size:14px;white-space:nowrap;">日期&ensp;:</div>
               <input type="date" v-model="selectedDate4" class="form-control" style="min-height:42px;flex:1;" />
@@ -702,7 +704,7 @@ watch(currentPage4, async (p) => {
                 </td>
 
                 <td class="price">
-                  <!-- 這裡不允許手動輸入價格（整筆金額） -->
+                  <!-- 價格不允許手動輸入 -->
                   <template v-if="editingId === record._id"><input type="number" v-model.number="record.price" min="0" step="0.01" disabled /></template>
                   <template v-else>{{ Number(record.price).toFixed(2) }}</template>
                 </td>
@@ -740,7 +742,7 @@ watch(currentPage4, async (p) => {
           <div class="d-flex justify-content-center mt-3">
             <div class="d-flex align-items-center gap-3 mb-3" style="width:100%;max-width:330px;">
               <div style="font-size:14px;white-space:nowrap;">日期&ensp;:</div>
-              <input type="date" v-model="selectedDate5" class="form-control" style="min-height:42px;flex:1;" @change="() => { fetchTotalAmount(); loadReportForDate(selectedDate5) }"/>
+              <input type="date" v-model="selectedDate5" class="form-control" style="min-height:42px;flex:1;" @change="() => { fetchTotalAmount(); loadReportForDate(selectedDate5.value) }"/>
             </div>
           </div>
 
