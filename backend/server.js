@@ -11,9 +11,6 @@ import ReportRoutes from './routes/report.js'
 
 dotenv.config()
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-
 const app = express()
 app.use(cors())
 app.use(express.json())
@@ -28,17 +25,21 @@ app.use('/records', In)
 app.use('/outrecords', Out)
 app.use('/reports', ReportRoutes)
 
-// 嘗試服務前端（如果有打包好的檔案）
-const distDir = path.resolve(__dirname, '../frontend/dist')
-app.use(express.static(distDir))
-
-app.get('/', (_req, res) => {
-  try {
+// 若你想用同一個服務同時提供前端（可選）：
+// 把前端 build 後的 dist 放到 ../frontend/dist，再設置環境變數 SERVE_STATIC=true
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const distDir = path.join(__dirname, '..', 'frontend', 'dist')
+if (process.env.SERVE_STATIC === 'true') {
+  app.use(express.static(distDir))
+  app.get('*', (_req, res) => {
     res.sendFile(path.join(distDir, 'index.html'))
-  } catch {
-    res.json({ ok: true, hint: 'ERP API online. Try /records, /outrecords, /reports' })
-  }
-})
+  })
+} else {
+  // 友善首頁：提示可用的 API
+  app.get('/', (_req, res) => {
+    res.json({ ok: true, hint: 'ERP API online. Try /health, /records, /outrecords, /reports' })
+  })
+}
 
 const PORT = Number(process.env.PORT) || 3000
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/mydb'

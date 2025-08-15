@@ -24,7 +24,7 @@ router.get('/:date', async (req, res) => {
   }
 })
 
-// 新增/覆寫單日報表（以 date 覆蓋）
+// 新增/覆寫單日報表
 router.post('/', async (req, res) => {
   try {
     const { date, qtyCake = 0, qtyJuice = 0, fixedExpense = 0, extraExpense = 0, netProfit = 0 } = req.body

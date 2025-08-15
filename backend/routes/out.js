@@ -3,7 +3,7 @@ import OutRecord from '../models/out.js'
 
 const router = Router()
 
-// 新增出庫（支援陣列或單筆）— price 為整筆總價（前端已用平均單價×數量算好）
+// 新增出庫（支援陣列或單筆）
 router.post('/', async (req, res) => {
   try {
     const body = req.body
@@ -53,7 +53,8 @@ router.delete('/:id', async (req, res) => {
   }
 })
 
-// 單日成本統計（報表頁用）
+// 《單日成本統計（報表頁用）》
+// 注意：price 是「整筆金額」，所以直接加總 price
 // totalGroup1: 檸檬汁；totalGroup2: 蘋果汁
 router.get('/total/:date', async (req, res) => {
   try {
@@ -64,9 +65,9 @@ router.get('/total/:date', async (req, res) => {
     let totalGroup2 = 0
 
     for (const r of list) {
-      const total = Number(r.price) // ⬅️ 直接用整筆總價
-      if (r.item === '檸檬汁') totalGroup1 += total
-      else if (r.item === '蘋果汁') totalGroup2 += total
+      const cost = Number(r.price) || 0 // 整筆金額
+      if (r.item === '檸檬汁') totalGroup1 += cost
+      else if (r.item === '蘋果汁') totalGroup2 += cost
     }
 
     res.json({ totalGroup1, totalGroup2 })
