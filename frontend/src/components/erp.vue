@@ -694,7 +694,7 @@ const submitReport = async () => {
 
                 <td class="price">
                   <template v-if="editingId === record._id">
-                    <input type="number" v-model.number="record.price" min="0" step="0.01" />
+                    <input type="number" v-model.number="record.price" min="0" step="0.01" disabled />
                   </template>
                   <template v-else>{{ Number(record.price).toFixed(2) }}</template>
                 </td>
