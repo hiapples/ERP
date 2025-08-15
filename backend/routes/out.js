@@ -1,6 +1,6 @@
 // backend/routes/out.js
 import { Router } from 'express'
-import OutRecord from '../models/outrecord.js'
+import OutRecord from '../models/out.js'
 
 const router = Router()
 
