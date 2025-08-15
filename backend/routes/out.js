@@ -1,5 +1,6 @@
+// backend/routes/out.js
 import { Router } from 'express'
-import OutRecord from '../models/out.js'
+import OutRecord from '../models/outrecord.js'
 
 const router = Router()
 
@@ -53,9 +54,9 @@ router.delete('/:id', async (req, res) => {
   }
 })
 
-// 《單日成本統計（報表頁用）》
-// 注意：price 是「整筆金額」，所以直接加總 price
+// 單日成本統計（報表頁用）
 // totalGroup1: 檸檬汁；totalGroup2: 蘋果汁
+// 這裡把 price 視為「整筆金額」，直接加總
 router.get('/total/:date', async (req, res) => {
   try {
     const { date } = req.params

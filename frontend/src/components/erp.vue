@@ -3,7 +3,7 @@ import { ref, onMounted, watch, computed } from 'vue'
 import axios from 'axios'
 
 // === API Base ===
-const API = 'https://erp-ahup.onrender.com' // 換成你的後端網址
+const API = 'https://erp-ahup.onrender.com'  // 同網域可改成 ''
 
 // === 分頁狀態 ===
 const currentPage = ref('one')
@@ -30,11 +30,11 @@ const itemOptions = ['檸檬汁', '蘋果汁']
 
 const isLoading = ref(false)
 
-// 報表用（價格為整筆金額）
-const totalGroup1 = ref('') // 檸檬汁成本（空字串代表尚未計算）
+// 報表用
+const totalGroup1 = ref('') // 檸檬汁成本（初始空字串避免一開始就顯示 0）
 const totalGroup2 = ref('') // 蘋果汁成本
-const qtyCake = ref('')     // 檸檬汁份數
-const qtyJuice = ref('')    // 蘋果汁份數
+const qtyCake = ref('')     // 對應「檸檬汁份數」
+const qtyJuice = ref('')    // 對應「蘋果汁份數」
 
 const unitPriceCake = 50
 const unitPriceJuice = 60
@@ -56,7 +56,7 @@ const isEmpty = (v) => v === '' || v === null || v === undefined
 const isRowEmptyIn = (row) => !row.item && isEmpty(row.quantity) && isEmpty(row.price)
 const isRowCompleteIn = (row) =>
   !!row.item && !isEmpty(row.quantity) && Number(row.quantity) > 0 &&
-  !isEmpty(row.price) && Number(row.price) > 0
+  !isEmpty(row.price) && Number(row.price) >= 0
 
 const isRowEmptyOut = (row) => !row.item && isEmpty(row.quantity)
 const isRowCompleteOut = (row) =>
@@ -75,7 +75,8 @@ function checkOutStock () {
     const inQty = recordList.value.filter(r => r.item === item).reduce((s, r) => s + Number(r.quantity), 0)
     const currentOutQty = recordList2.value.filter(r => r.item === item).reduce((s, r) => s + Number(r.quantity), 0)
     if (outQty + currentOutQty > inQty) {
-      alert(`【${item}】庫存不足，無法出庫 ${outQty}，目前庫存僅剩 ${inQty - currentOutQty}`)
+      const left = (inQty - currentOutQty).toFixed(2)
+      alert(`【${item}】庫存不足，無法出庫 ${outQty}，目前庫存僅剩 ${left}`)
       return false
     }
   }
@@ -95,12 +96,17 @@ const rows2 = ref(Array.from({ length: 5 }, () => ({ item: '', quantity: '', pri
 const submitAll = async () => {
   if (!selectedDate.value) { alert('❌ 請選擇日期'); return }
   const hasIncomplete = rows.value.some(r => !isRowEmptyIn(r) && !isRowCompleteIn(r))
-  if (hasIncomplete) { alert('❌ 入庫：每列要嘛空白、要嘛品項/數量/價格都填好（數量/價格需 > 0）'); return }
+  if (hasIncomplete) { alert('❌ 入庫：每一列要嘛空白、要嘛品項/數量/價格都填好（數量 > 0，價格可為 0 並接受小數）'); return }
   const validRows = rows.value.filter(isRowCompleteIn)
   if (validRows.length === 0) { alert('❌ 入庫：請至少填寫一列完整資料'); return }
 
   try {
-    const dataWithDate = validRows.map(row => ({ ...row, date: selectedDate.value }))
+    const dataWithDate = validRows.map(row => ({
+      ...row,
+      quantity: Number(row.quantity),
+      price: Number(Number(row.price).toFixed(2)), // 整筆金額
+      date: selectedDate.value
+    }))
     const { data } = await axios.post(`${API}/records`, dataWithDate)
     alert(`✅ 共送出 ${data.inserted} 筆入庫資料`)
     await fetchRecords3()
@@ -110,20 +116,21 @@ const submitAll = async () => {
   }
 }
 
-// 送出出庫（price 由「平均單價 × 數量」計算為整筆金額）
+// 送出出庫（price = 平均單價 × 數量，存成整筆金額）
 const submitAll2 = async () => {
   if (!selectedDate3.value) { alert('❌ 請選擇日期'); return }
   const hasIncomplete = rows2.value.some(r => !isRowEmptyOut(r) && !isRowCompleteOut(r))
-  if (hasIncomplete) { alert('❌ 出庫：每列要嘛空白、要嘛品項/數量都填好（數量需 > 0，且平均單價需 > 0）'); return }
+  if (hasIncomplete) { alert('❌ 出庫：每一列要嘛空白、要嘛品項/數量都填好（數量需 > 0，且平均單價需 > 0）'); return }
   const validRows = rows2.value.filter(isRowCompleteOut)
   if (validRows.length === 0) { alert('❌ 出庫：請至少填寫一列完整資料'); return }
   if (!checkOutStock()) return
 
   try {
     const dataWithDate = validRows.map(row => {
-      const avgUnit = getAvgPrice(row.item) // 單位成本
-      const total = Math.round(avgUnit * Number(row.quantity) * 100) / 100 // 整筆金額
-      return { ...row, date: selectedDate3.value, price: total }
+      const qty = Number(row.quantity)
+      const unit = Number(getAvgPrice(row.item))
+      const lineTotal = Number((unit * qty).toFixed(2)) // 整筆金額
+      return { ...row, quantity: qty, price: lineTotal, date: selectedDate3.value }
     })
     const { data } = await axios.post(`${API}/outrecords`, dataWithDate)
     alert(`✅ 共送出 ${data.inserted} 筆出庫資料`)
@@ -177,7 +184,7 @@ const fetchRecords3 = async () => {
   }
 }
 
-// 報表單日成本（後端已改成加總整筆金額）
+// 報表單日成本（後端已改為整筆加總）
 const fetchTotalAmount = async () => {
   if (!selectedDate5.value) { totalGroup1.value = ''; totalGroup2.value = ''; return }
   try {
@@ -320,22 +327,21 @@ const deleteReportByDate = async (dateStr) => {
   }
 }
 
-// 《庫存彙總》重點：price 是整筆金額
+// 庫存彙總（價格用整筆加總）
 const itemSummary = computed(() => {
   const summary = []
   for (const item of itemOptions) {
     const inRecords = recordList.value.filter(r => r.item === item)
     const inQty = inRecords.reduce((sum, r) => sum + Number(r.quantity), 0)
-    const inTotalPrice = inRecords.reduce((sum, r) => sum + Number(r.price), 0) // 不再乘以 quantity
+    const inSumPrice = inRecords.reduce((sum, r) => sum + Number(r.price), 0) // 整筆加總
 
     const outRecords = recordList2.value.filter(r => r.item === item)
     const outQty = outRecords.reduce((sum, r) => sum + Number(r.quantity), 0)
-    const outTotalPrice = outRecords.reduce((sum, r) => sum + Number(r.price), 0) // 不再乘以 quantity
+    const outSumPrice = outRecords.reduce((sum, r) => sum + Number(r.price), 0) // 整筆加總
 
     const stockQty = inQty - outQty
-    const stockTotalPrice = inTotalPrice - outTotalPrice
-    const avgPrice = stockQty > 0 ? stockTotalPrice / stockQty : 0 // 單位平均成本
-
+    const stockTotalPrice = inSumPrice - outSumPrice
+    const avgPrice = stockQty > 0 ? stockTotalPrice / stockQty : 0
     summary.push({ item, quantity: stockQty, avgPrice, totalPrice: stockTotalPrice })
   }
   return summary
@@ -539,7 +545,7 @@ const submitReport = async () => {
                   <template v-if="editingId === record._id">
                     <input type="number" v-model.number="record.quantity" min="0.01" step="0.01" />
                   </template>
-                  <template v-else>{{ record.quantity }}</template>
+                  <template v-else>{{ Number(record.quantity).toFixed(2) }}</template>
                 </td>
 
                 <td class="price">
@@ -593,9 +599,9 @@ const submitReport = async () => {
               <tbody>
                 <tr v-for="(record, index) in itemSummary" :key="index">
                   <td>{{ record.item }}</td>
-                  <td>{{ record.quantity }}</td>
-                  <td>{{ record.avgPrice.toFixed(2) }}</td>
-                  <td>{{ Math.round(Number(record.totalPrice) || 0) }}</td>
+                  <td>{{ Number(record.quantity).toFixed(2) }}</td>
+                  <td>{{ Number(record.avgPrice).toFixed(2) }}</td>
+                  <td>{{ Number(record.totalPrice).toFixed(2) }}</td>
                 </tr>
               </tbody>
             </table>
@@ -630,7 +636,7 @@ const submitReport = async () => {
                 <th></th>
                 <th>品項</th>
                 <th>數量</th>
-                <th>單位成本(參考)</th>
+                <th>單價（平均）</th>
                 <th>備註</th>
               </tr>
             </thead>
@@ -715,7 +721,7 @@ const submitReport = async () => {
                   <template v-if="editingId === record._id">
                     <input type="number" v-model.number="record.quantity" min="0.01" step="0.01" />
                   </template>
-                  <template v-else>{{ record.quantity }}</template>
+                  <template v-else>{{ Number(record.quantity).toFixed(2) }}</template>
                 </td>
 
                 <td class="price">
@@ -779,7 +785,7 @@ const submitReport = async () => {
               <tr>
                 <td>檸檬汁</td>
                 <td class="d-flex justify-content-center align-items-center gap-2">
-                  <input v-model.number="qtyCake" type="number" min="0" class="form-control text-center report" style="display: inline-block;" />
+                  <input v-model.number="qtyCake" type="number" min="0" step="1" class="form-control text-center report" style="display: inline-block;" />
                   <span>× {{ unitPriceCake }}</span>
                 </td>
                 <td>{{ revenueCake }}</td>
@@ -789,7 +795,7 @@ const submitReport = async () => {
               <tr>
                 <td>蘋果汁</td>
                 <td class="d-flex justify-content-center align-items-center gap-2">
-                  <input v-model.number="qtyJuice" type="number" min="0" class="form-control text-center report" style="display: inline-block;" />
+                  <input v-model.number="qtyJuice" type="number" min="0" step="1" class="form-control text-center report" style="display: inline-block;" />
                   <span>× {{ unitPriceJuice }}</span>
                 </td>
                 <td>{{ revenueJuice }}</td>
@@ -820,11 +826,11 @@ const submitReport = async () => {
 
           <div class="d-flex justify-content-center align-items-center gap-3 mt-3">
             <label>固定支出：</label>
-            <input v-model.number="fixedExpense" type="number" min="0" class="form-control text-center report2" />
+            <input v-model.number="fixedExpense" type="number" min="0" step="1" class="form-control text-center report2" />
           </div>
           <div class="d-flex justify-content-center align-items-center gap-3 mt-2">
             <label>額外支出：</label>
-            <input v-model.number="extraExpense" type="number" min="0" class="form-control text-center report2" />
+            <input v-model.number="extraExpense" type="number" min="0" step="1" class="form-control text-center report2" />
           </div>
           <div class="d-flex justify-content-center align-items-center gap-3 mt-2">
             <div class="fw-bold">淨利：</div>
@@ -880,7 +886,7 @@ const submitReport = async () => {
 </template>
 
 <style scoped>
-/* 原樣式完全不變或小幅調整文字 */
+/* 原樣式維持 */
 .item {
   background-color: #b2afaf;
   width: 50%;
@@ -950,10 +956,10 @@ input {
 select { width: 100%; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
 td select, td input { min-height: 30px; }
 .items{ min-width: 80px; }
-.qty { min-width: 45px; }
-.price { min-width: 45px; }
-.price-text{ min-width: 50px; }
-.note { min-width: 50px; }
+.qty { min-width: 60px; }
+.price { min-width: 60px; }
+.price-text{ min-width: 60px; }
+.note { min-width: 60px; }
 .button{ max-width: 20px; padding-left: 0px!important; padding-right: 25px!important; }
 input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .title{ color: #ff0000; margin-bottom: 1rem; }
@@ -971,7 +977,6 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
 .total-row > td:first-child::before { left: 20%; width: 100%; }
 .total-row > td:last-child::before { width: 80%; }
 
-/* 只有「報表總攬」行高加大、刪按鈕垂直置中 */
 .report-table tbody tr { height: 56px; }
 .report-table tbody td { vertical-align: middle; }
 </style>
