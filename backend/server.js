@@ -1,3 +1,4 @@
+// backend/server.js
 import express from 'express'
 import mongoose from 'mongoose'
 import cors from 'cors'
@@ -15,31 +16,27 @@ const app = express()
 app.use(cors())
 app.use(express.json())
 
-// 健康檢查
+// --- API (先掛 API 路由) ---
 app.get('/health', (_req, res) => {
   res.json({ ok: true })
 })
-
-// API 路由
 app.use('/records', In)
 app.use('/outrecords', Out)
 app.use('/reports', ReportRoutes)
 
-// 若你想用同一個服務同時提供前端（可選）：
-// 把前端 build 後的 dist 放到 ../frontend/dist，再設置環境變數 SERVE_STATIC=true
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const distDir = path.join(__dirname, '..', 'frontend', 'dist')
-if (process.env.SERVE_STATIC === 'true') {
-  app.use(express.static(distDir))
-  app.get('*', (_req, res) => {
-    res.sendFile(path.join(distDir, 'index.html'))
-  })
-} else {
-  // 友善首頁：提示可用的 API
-  app.get('/', (_req, res) => {
-    res.json({ ok: true, hint: 'ERP API online. Try /health, /records, /outrecords, /reports' })
-  })
-}
+// --- 靜態檔案 (前端打包後的 dist) ---
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const clientDist = path.resolve(__dirname, '../frontend/dist')
+
+// 提供 /assets/*、/index.html 等靜態檔案
+app.use(express.static(clientDist))
+
+// SPA fallback：把非 API 的路由都回傳 index.html，讓前端路由接手
+app.get('*', (req, res) => {
+  // 避免誤攔 API/健康檢查（已在上面先行匹配，不會進到這裡）
+  res.sendFile(path.join(clientDist, 'index.html'))
+})
 
 const PORT = Number(process.env.PORT) || 3000
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/mydb'
