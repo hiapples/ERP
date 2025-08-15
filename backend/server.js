@@ -1,4 +1,3 @@
-// backend/server.js
 import express from 'express'
 import mongoose from 'mongoose'
 import cors from 'cors'
@@ -6,36 +5,36 @@ import dotenv from 'dotenv'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
-import In from './routes/in.js'
-import Out from './routes/out.js'
+import InRoutes from './routes/in.js'
+import OutRoutes from './routes/out.js'
 import ReportRoutes from './routes/report.js'
 
 dotenv.config()
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 const app = express()
 app.use(cors())
 app.use(express.json())
 
-// --- API (先掛 API 路由) ---
-app.get('/health', (_req, res) => {
-  res.json({ ok: true })
+// 健康檢查
+app.get('/health', (req, res) => {
+  res.json({ ok: true, hint: 'ERP API online. Try /records, /outrecords, /reports' })
 })
-app.use('/records', In)
-app.use('/outrecords', Out)
+
+// API 路由（不加 /api 前綴）
+app.use('/records', InRoutes)
+app.use('/outrecords', OutRoutes)
 app.use('/reports', ReportRoutes)
 
-// --- 靜態檔案 (前端打包後的 dist) ---
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-const clientDist = path.resolve(__dirname, '../frontend/dist')
+// 服務前端靜態檔（Render 上 Root Directory 設為 backend）
+const distPath = path.resolve(__dirname, '../frontend/dist')
+app.use(express.static(distPath))
 
-// 提供 /assets/*、/index.html 等靜態檔案
-app.use(express.static(clientDist))
-
-// SPA fallback：把非 API 的路由都回傳 index.html，讓前端路由接手
+// SPA fallback
 app.get('*', (req, res) => {
-  // 避免誤攔 API/健康檢查（已在上面先行匹配，不會進到這裡）
-  res.sendFile(path.join(clientDist, 'index.html'))
+  res.sendFile(path.join(distPath, 'index.html'))
 })
 
 const PORT = Number(process.env.PORT) || 3000
@@ -47,7 +46,7 @@ mongoose
   .connect(MONGO_URI)
   .then(() => {
     app.listen(PORT, () => {
-      console.log(`✅ Server running at http://localhost:${PORT}`)
+      console.log(`✅ Server running on http://localhost:${PORT}`)
     })
   })
   .catch((err) => {

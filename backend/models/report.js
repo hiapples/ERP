@@ -7,7 +7,7 @@ const ReportSchema = new mongoose.Schema(
     qtyJuice: { type: Number, default: 0 },  // 蘋果汁份數
     fixedExpense: { type: Number, default: 0 },
     extraExpense: { type: Number, default: 0 },
-    netProfit: { type: Number, default: 0 }
+    netProfit: { type: Number, default: 0 }  // 可存放當日計算完成的淨利
   },
   { timestamps: true }
 )

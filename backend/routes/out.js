@@ -1,10 +1,9 @@
-// backend/routes/out.js
 import { Router } from 'express'
 import OutRecord from '../models/out.js'
 
 const router = Router()
 
-// 新增出庫（支援陣列或單筆）
+// 新增出庫（支援單筆或陣列）
 router.post('/', async (req, res) => {
   try {
     const body = req.body
@@ -20,7 +19,7 @@ router.post('/', async (req, res) => {
   }
 })
 
-// 查詢出庫（可加 date / item）
+// 查詢出庫
 router.get('/', async (req, res) => {
   try {
     const { date, item } = req.query
@@ -34,7 +33,7 @@ router.get('/', async (req, res) => {
   }
 })
 
-// 更新
+// 更新出庫
 router.put('/:id', async (req, res) => {
   try {
     await OutRecord.findByIdAndUpdate(req.params.id, req.body, { new: true })
@@ -44,7 +43,7 @@ router.put('/:id', async (req, res) => {
   }
 })
 
-// 刪除
+// 刪除出庫
 router.delete('/:id', async (req, res) => {
   try {
     await OutRecord.findByIdAndDelete(req.params.id)
@@ -54,9 +53,7 @@ router.delete('/:id', async (req, res) => {
   }
 })
 
-// 單日成本統計（報表頁用）
-// totalGroup1: 檸檬汁；totalGroup2: 蘋果汁
-// 這裡把 price 視為「整筆金額」，直接加總
+// 報表：單日銷貨成本（整筆金額加總）
 router.get('/total/:date', async (req, res) => {
   try {
     const { date } = req.params

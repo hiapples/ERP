@@ -3,7 +3,7 @@ import InRecord from '../models/in.js'
 
 const router = Router()
 
-// 新增入庫（支援陣列或單筆）
+// 新增入庫（支援單筆或陣列）
 router.post('/', async (req, res) => {
   try {
     const body = req.body
@@ -19,7 +19,7 @@ router.post('/', async (req, res) => {
   }
 })
 
-// 查詢入庫（可加 date / item）
+// 查詢入庫
 router.get('/', async (req, res) => {
   try {
     const { date, item } = req.query
@@ -33,7 +33,7 @@ router.get('/', async (req, res) => {
   }
 })
 
-// 更新
+// 更新入庫
 router.put('/:id', async (req, res) => {
   try {
     await InRecord.findByIdAndUpdate(req.params.id, req.body, { new: true })
@@ -43,7 +43,7 @@ router.put('/:id', async (req, res) => {
   }
 })
 
-// 刪除
+// 刪除入庫
 router.delete('/:id', async (req, res) => {
   try {
     await InRecord.findByIdAndDelete(req.params.id)

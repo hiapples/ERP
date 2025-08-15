@@ -2,10 +2,10 @@
 import { ref, onMounted, watch, computed } from 'vue'
 import axios from 'axios'
 
-// === API Base ===
-const API = 'https://erp-ahup.onrender.com'  // 同網域可改成 ''
+// 改成同網域部署就用空字串 ''；如果你要固定打向 Render 網域，就填完整網址
+const API = '' // 'https://erp-ahup.onrender.com'
 
-// === 分頁狀態 ===
+// 分頁
 const currentPage = ref('one')
 const currentPage2 = ref('one-1')
 const currentPage3 = ref('one-1')
@@ -19,28 +19,30 @@ const selectedDate4 = ref('')
 const selectedDate5 = ref(today)
 const selectedDate6 = ref('')
 
-// 資料
+// 清單
 const recordList = ref([])
 const recordList2 = ref([])
+
+// 單筆輸入（取代 5 列）
+const inRow = ref({ item: '', quantity: '', price: '', note: '' })
+const outRow = ref({ item: '', quantity: '', note: '' })
+
 const editingId = ref(null)
 const selectedItem = ref('')
 const selectedItem2 = ref('')
 
 const itemOptions = ['檸檬汁', '蘋果汁']
-
 const isLoading = ref(false)
 
-// 報表用
-const totalGroup1 = ref('') // 檸檬汁成本（初始空字串避免一開始就顯示 0）
-const totalGroup2 = ref('') // 蘋果汁成本
-const qtyCake = ref('')     // 對應「檸檬汁份數」
-const qtyJuice = ref('')    // 對應「蘋果汁份數」
-
+// 報表
+const totalGroup1 = ref('')
+const totalGroup2 = ref('')
+const qtyCake = ref('')
+const qtyJuice = ref('')
 const unitPriceCake = 50
 const unitPriceJuice = 60
 const revenueCake = computed(() => Number(qtyCake.value || 0) * unitPriceCake)
 const revenueJuice = computed(() => Number(qtyJuice.value || 0) * unitPriceJuice)
-
 const fixedExpense = ref('')
 const extraExpense = ref('')
 const netProfit = computed(() =>
@@ -50,35 +52,32 @@ const netProfit = computed(() =>
   - Number(extraExpense.value || 0)
 )
 
-// ====== 共用檢核 ======
+// 檢核
 const isEmpty = (v) => v === '' || v === null || v === undefined
-
-const isRowEmptyIn = (row) => !row.item && isEmpty(row.quantity) && isEmpty(row.price)
 const isRowCompleteIn = (row) =>
   !!row.item && !isEmpty(row.quantity) && Number(row.quantity) > 0 &&
   !isEmpty(row.price) && Number(row.price) >= 0
-
-const isRowEmptyOut = (row) => !row.item && isEmpty(row.quantity)
 const isRowCompleteOut = (row) =>
   !!row.item && !isEmpty(row.quantity) && Number(row.quantity) > 0 &&
   getAvgPrice(row.item) > 0
 
 function checkOutStock () {
-  const outQtyMap = {}
-  for (const row of rows2.value) {
-    if (!row.item || !row.quantity) continue
-    if (!outQtyMap[row.item]) outQtyMap[row.item] = 0
-    outQtyMap[row.item] += Number(row.quantity)
-  }
-  for (const item in outQtyMap) {
-    const outQty = outQtyMap[item]
-    const inQty = recordList.value.filter(r => r.item === item).reduce((s, r) => s + Number(r.quantity), 0)
-    const currentOutQty = recordList2.value.filter(r => r.item === item).reduce((s, r) => s + Number(r.quantity), 0)
-    if (outQty + currentOutQty > inQty) {
-      const left = (inQty - currentOutQty).toFixed(2)
-      alert(`【${item}】庫存不足，無法出庫 ${outQty}，目前庫存僅剩 ${left}`)
-      return false
-    }
+  const row = outRow.value
+  if (!row.item || !row.quantity) return true
+  const outQty = Number(row.quantity)
+
+  const inQty = recordList.value
+    .filter(r => r.item === row.item)
+    .reduce((s, r) => s + Number(r.quantity), 0)
+
+  const currentOutQty = recordList2.value
+    .filter(r => r.item === row.item)
+    .reduce((s, r) => s + Number(r.quantity), 0)
+
+  if (outQty + currentOutQty > inQty) {
+    const left = (inQty - currentOutQty).toFixed(2)
+    alert(`【${row.item}】庫存不足，無法出庫 ${outQty}，目前庫存僅剩 ${left}`)
+    return false
   }
   return true
 }
@@ -88,60 +87,57 @@ const getAvgPrice = (item) => {
   return found ? found.avgPrice : 0
 }
 
-// 入/出庫輸入列
-const rows = ref(Array.from({ length: 5 }, () => ({ item: '', quantity: '', price: '', note: '' })))
-const rows2 = ref(Array.from({ length: 5 }, () => ({ item: '', quantity: '', price: '', note: '' })))
-
-// 送出入庫（price 為整筆金額）
-const submitAll = async () => {
+// 送出入庫（價格為整筆）
+const submitIn = async () => {
+  const row = inRow.value
   if (!selectedDate.value) { alert('❌ 請選擇日期'); return }
-  const hasIncomplete = rows.value.some(r => !isRowEmptyIn(r) && !isRowCompleteIn(r))
-  if (hasIncomplete) { alert('❌ 入庫：每一列要嘛空白、要嘛品項/數量/價格都填好（數量 > 0，價格可為 0 並接受小數）'); return }
-  const validRows = rows.value.filter(isRowCompleteIn)
-  if (validRows.length === 0) { alert('❌ 入庫：請至少填寫一列完整資料'); return }
+  if (!isRowCompleteIn(row)) { alert('❌ 入庫：品項/數量/價格需填寫（數量>0，價格可為0）'); return }
 
   try {
-    const dataWithDate = validRows.map(row => ({
-      ...row,
+    const payload = {
+      item: row.item,
       quantity: Number(row.quantity),
       price: Number(Number(row.price).toFixed(2)), // 整筆金額
+      note: row.note || '',
       date: selectedDate.value
-    }))
-    const { data } = await axios.post(`${API}/records`, dataWithDate)
-    alert(`✅ 共送出 ${data.inserted} 筆入庫資料`)
+    }
+    await axios.post(`${API}/records`, payload)
+    alert('✅ 入庫成功')
     await fetchRecords3()
-    rows.value = Array.from({ length: 5 }, () => ({ item: '', quantity: '', price: '', note: '' }))
+    inRow.value = { item: '', quantity: '', price: '', note: '' }
   } catch (err) {
     alert('❌ 發送失敗：' + err.message)
   }
 }
 
-// 送出出庫（price = 平均單價 × 數量，存成整筆金額）
-const submitAll2 = async () => {
+// 送出出庫（以平均單價×數量，存整筆金額）
+const submitOut = async () => {
+  const row = outRow.value
   if (!selectedDate3.value) { alert('❌ 請選擇日期'); return }
-  const hasIncomplete = rows2.value.some(r => !isRowEmptyOut(r) && !isRowCompleteOut(r))
-  if (hasIncomplete) { alert('❌ 出庫：每一列要嘛空白、要嘛品項/數量都填好（數量需 > 0，且平均單價需 > 0）'); return }
-  const validRows = rows2.value.filter(isRowCompleteOut)
-  if (validRows.length === 0) { alert('❌ 出庫：請至少填寫一列完整資料'); return }
+  if (!isRowCompleteOut(row)) { alert('❌ 出庫：品項/數量需填（數量>0，平均單價>0）'); return }
   if (!checkOutStock()) return
 
   try {
-    const dataWithDate = validRows.map(row => {
-      const qty = Number(row.quantity)
-      const unit = Number(getAvgPrice(row.item))
-      const lineTotal = Number((unit * qty).toFixed(2)) // 整筆金額
-      return { ...row, quantity: qty, price: lineTotal, date: selectedDate3.value }
-    })
-    const { data } = await axios.post(`${API}/outrecords`, dataWithDate)
-    alert(`✅ 共送出 ${data.inserted} 筆出庫資料`)
+    const qty = Number(row.quantity)
+    const unit = Number(getAvgPrice(row.item))
+    const lineTotal = Number((unit * qty).toFixed(2))
+    const payload = {
+      item: row.item,
+      quantity: qty,
+      price: lineTotal, // 整筆金額
+      note: row.note || '',
+      date: selectedDate3.value
+    }
+    await axios.post(`${API}/outrecords`, payload)
+    alert('✅ 出庫成功')
     await fetchRecords3()
-    rows2.value = Array.from({ length: 5 }, () => ({ item: '', quantity: '', price: '', note: '' }))
+    outRow.value = { item: '', quantity: '', note: '' }
   } catch (err) {
     alert('❌ 發送失敗：' + err.message)
   }
 }
 
-// 讀入/出庫
+// 讀資料
 const fetchRecords = async () => {
   try {
     let url = `${API}/records`
@@ -184,14 +180,14 @@ const fetchRecords3 = async () => {
   }
 }
 
-// 報表單日成本（後端已改為整筆加總）
+// 報表成本（整筆金額加總）
 const fetchTotalAmount = async () => {
   if (!selectedDate5.value) { totalGroup1.value = ''; totalGroup2.value = ''; return }
   try {
     const { data } = await axios.get(`${API}/outrecords/total/${selectedDate5.value}`)
     totalGroup1.value = Number(data?.totalGroup1 || 0)
     totalGroup2.value = Number(data?.totalGroup2 || 0)
-  } catch (_e) {
+  } catch {
     totalGroup1.value = ''
     totalGroup2.value = ''
   }
@@ -205,16 +201,14 @@ async function loadReportForDate (dateStr) {
     const { data } = await axios.get(`${API}/reports/${encodeURIComponent(dateStr)}`)
     isAutofilling.value = true
     if (data) {
-      const cake = data?.qtyCake ?? 0
-      const juice = data?.qtyJuice ?? 0
-      qtyCake.value = Number(cake) || 0
-      qtyJuice.value = Number(juice) || 0
+      qtyCake.value = Number(data?.qtyCake ?? 0)
+      qtyJuice.value = Number(data?.qtyJuice ?? 0)
       fixedExpense.value = Number(data?.fixedExpense ?? 0)
       extraExpense.value = Number(data?.extraExpense ?? 0)
     } else {
       qtyCake.value = 0; qtyJuice.value = 0; fixedExpense.value = 0; extraExpense.value = 0
     }
-  } catch (_e) {
+  } catch {
     isAutofilling.value = true
     qtyCake.value = 0; qtyJuice.value = 0; fixedExpense.value = 0; extraExpense.value = 0
   } finally {
@@ -249,16 +243,11 @@ async function fetchCostsForReports () {
   })
   await Promise.all(tasks)
 }
-function getCosts (dateStr) {
-  return costsByDate.value[dateStr] || { g1: 0, g2: 0 }
-}
+function getCosts (dateStr) { return costsByDate.value[dateStr] || { g1: 0, g2: 0 } }
 function getQtyCake (r) { return Number(r?.qtyCake ?? 0) }
 function getQtyJuice (r) { return Number(r?.qtyJuice ?? 0) }
 function revenuePerItem (qty, unitPrice) { return Number(qty) * unitPrice }
-function storedNet (r) {
-  const n = r?.netProfit
-  return (n === 0 || (typeof n === 'number' && !Number.isNaN(n))) ? Number(n) : null
-}
+function storedNet (r) { const n = r?.netProfit; return (n === 0 || (typeof n === 'number' && !Number.isNaN(n))) ? Number(n) : null }
 function computedNet (r) {
   const c = getCosts(r.date)
   const revenue = revenuePerItem(getQtyCake(r), unitPriceCake) + revenuePerItem(getQtyJuice(r), unitPriceJuice)
@@ -267,12 +256,9 @@ function computedNet (r) {
   const ee = Number(r.extraExpense || 0)
   return revenue - cost - fe - ee
 }
-function dailyNet (r) {
-  const s = storedNet(r)
-  return s !== null ? s : computedNet(r)
-}
+function dailyNet (r) { const s = storedNet(r); return s !== null ? s : computedNet(r) }
 
-// 列表編修（入/出庫）
+// 編修/刪除
 const confirmEdit = async () => {
   const editingRecord = recordList.value.find(r => r._id === editingId.value)
   try {
@@ -296,14 +282,11 @@ const confirmEdit2 = async () => {
 }
 const startEditRecord = (id) => { editingId.value = id }
 const startEditRecord2 = (id) => { editingId.value = id }
+
 const deleteRecord = async (id) => {
   if (!confirm('❌ 確定要刪除這筆資料嗎？')) return
-  try {
-    await axios.delete(`${API}/records/${id}`)
-    await fetchRecords()
-  } catch (err) {
-    alert('❌ 刪除失敗：' + err.message)
-  }
+  try { await axios.delete(`${API}/records/${id}`); await fetchRecords() }
+  catch (err) { alert('❌ 刪除失敗：' + err.message) }
 }
 const deleteRecord2 = async (id) => {
   if (!confirm('❌ 確定要刪除這筆資料嗎？')) return
@@ -327,65 +310,52 @@ const deleteReportByDate = async (dateStr) => {
   }
 }
 
-// 庫存彙總（價格用整筆加總）
+// 庫存彙總：以整筆金額計算平均單價
 const itemSummary = computed(() => {
   const summary = []
   for (const item of itemOptions) {
     const inRecords = recordList.value.filter(r => r.item === item)
     const inQty = inRecords.reduce((sum, r) => sum + Number(r.quantity), 0)
-    const inSumPrice = inRecords.reduce((sum, r) => sum + Number(r.price), 0) // 整筆加總
+    const inSumPrice = inRecords.reduce((sum, r) => sum + Number(r.price), 0)
 
     const outRecords = recordList2.value.filter(r => r.item === item)
     const outQty = outRecords.reduce((sum, r) => sum + Number(r.quantity), 0)
-    const outSumPrice = outRecords.reduce((sum, r) => sum + Number(r.price), 0) // 整筆加總
+    const outSumPrice = outRecords.reduce((sum, r) => sum + Number(r.price), 0)
 
     const stockQty = inQty - outQty
     const stockTotalPrice = inSumPrice - outSumPrice
     const avgPrice = stockQty > 0 ? stockTotalPrice / stockQty : 0
+
     summary.push({ item, quantity: stockQty, avgPrice, totalPrice: stockTotalPrice })
   }
   return summary
 })
 
-function clearRow (index) { rows.value[index] = { item: '', quantity: '', price: '', note: '' } }
-function clearRow2 (index) { rows2.value[index] = { item: '', quantity: '', price: '', note: '' } }
+const clearIn = () => { inRow.value = { item: '', quantity: '', price: '', note: '' } }
+const clearOut = () => { outRow.value = { item: '', quantity: '', note: '' } }
 
-// 掛載 / 監聽
+// 掛載/監聽
 onMounted(() => {
-  if (currentPage.value === 'two') fetchRecords3()
-  else if (currentPage.value === 'three') fetchRecords3()
-  else if (currentPage.value === 'four') {
-    fetchTotalAmount()
-    loadReportForDate(selectedDate5.value)
-  } else {
-    fetchRecords()
-  }
+  if (currentPage.value === 'two' || currentPage.value === 'three') fetchRecords3()
+  else if (currentPage.value === 'four') { fetchTotalAmount(); loadReportForDate(selectedDate5.value) }
+  else { fetchRecords() }
 })
 
 watch(
   [selectedDate, selectedDate2, selectedDate3, selectedDate4, selectedDate5, selectedDate6, selectedItem, selectedItem2, currentPage],
   () => {
-    if (currentPage.value === 'two') {
-      fetchRecords3()
-    } else if (currentPage.value === 'three') {
-      fetchRecords3()
-    } else if (currentPage.value === 'four') {
-      fetchTotalAmount()
-      if (selectedDate5.value) loadReportForDate(selectedDate5.value)
-    } else {
-      fetchRecords()
-    }
+    if (currentPage.value === 'two' || currentPage.value === 'three') fetchRecords3()
+    else if (currentPage.value === 'four') { fetchTotalAmount(); if (selectedDate5.value) loadReportForDate(selectedDate5.value) }
+    else { fetchRecords() }
   },
   { immediate: true }
 )
 
 watch(currentPage4, (p) => {
-  if (currentPage.value === 'four' && p === 'two-2') {
-    fetchReportsList()
-  }
+  if (currentPage.value === 'four' && p === 'two-2') fetchReportsList()
 })
 
-// 報表規則
+// 報表規則（成本為 0 時，份數不可 > 0）
 watch(qtyCake, (q) => {
   if (Number(totalGroup1.value || 0) === 0 && Number(q) > 0) {
     if (!isAutofilling.value) alert('❌ 檸檬汁的「銷貨成本」為 0，份數必須為 0')
@@ -401,11 +371,10 @@ watch(qtyJuice, (q) => {
 
 const submitReport = async () => {
   if (!selectedDate5.value) { alert('❌ 請先選擇報表日期'); return }
-  const mustNumber = (val) => !(val === '' || val === null || val === undefined) && !isNaN(Number(val))
-  if (!mustNumber(qtyCake.value)) { alert('❌ 請填寫檸檬汁份數（可為 0）'); return }
-  if (!mustNumber(qtyJuice.value)) { alert('❌ 請填寫蘋果汁份數（可為 0）'); return }
-  if (!mustNumber(fixedExpense.value)) { alert('❌ 請填寫固定支出（可為 0）'); return }
-  if (!mustNumber(extraExpense.value)) { alert('❌ 請填寫額外支出（可為 0）'); return }
+  const mustNumber = (v) => !(v === '' || v === null || v === undefined) && !isNaN(Number(v))
+  if (!mustNumber(qtyCake.value) || !mustNumber(qtyJuice.value) || !mustNumber(fixedExpense.value) || !mustNumber(extraExpense.value)) {
+    alert('❌ 請完整填寫數字（可為 0）'); return
+  }
 
   if (Number(totalGroup1.value || 0) === 0 && Number(qtyCake.value) > 0) { alert('❌ 檸檬汁成本為 0，份數必須為 0'); qtyCake.value = 0; return }
   if (Number(totalGroup2.value || 0) === 0 && Number(qtyJuice.value) > 0) { alert('❌ 蘋果汁成本為 0，份數必須為 0'); qtyJuice.value = 0; return }
@@ -418,7 +387,6 @@ const submitReport = async () => {
     extraExpense: Number(extraExpense.value || 0),
     netProfit: Number(netProfit.value || 0)
   }
-
   try {
     await axios.post(`${API}/reports`, payload)
     alert('✅ 報表已送出')
@@ -465,22 +433,22 @@ const submitReport = async () => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(row, index) in rows" :key="index">
-                <td><div class="clear" @click="clearRow(index)" type="button">空</div></td>
+              <tr>
+                <td><div class="clear" @click="clearIn" type="button">空</div></td>
                 <td class="items">
-                  <select v-model="row.item">
+                  <select v-model="inRow.item">
                     <option v-for="option in itemOptions" :key="option" :value="option">{{ option }}</option>
                   </select>
                 </td>
-                <td><input type="number" class="qty" v-model.number="row.quantity" min="0.01" step="0.01" /></td>
-                <td><input type="number" class="price" v-model.number="row.price" min="0" step="0.01" /></td>
-                <td><input class="note" v-model="row.note" /></td>
+                <td><input type="number" class="qty" v-model.number="inRow.quantity" min="0.01" step="0.01" /></td>
+                <td><input type="number" class="price" v-model.number="inRow.price" min="0" step="0.01" /></td>
+                <td><input class="note" v-model="inRow.note" /></td>
               </tr>
             </tbody>
           </table>
 
           <div class="d-flex justify-content-end">
-            <button class="btn text-center ms-2" @click="submitAll">送出全部</button>
+            <button class="btn text-center ms-2" @click="submitIn">送出</button>
           </div>
         </div>
       </div>
@@ -641,22 +609,22 @@ const submitReport = async () => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(row, index) in rows2" :key="index">
-                <td><div type="button" class="clear" @click="clearRow2(index)">空</div></td>
+              <tr>
+                <td><div type="button" class="clear" @click="clearOut">空</div></td>
                 <td class="items">
-                  <select v-model="row.item">
+                  <select v-model="outRow.item">
                     <option v-for="option in itemOptions" :key="option" :value="option">{{ option }}</option>
                   </select>
                 </td>
-                <td><input type="number" class="qty" v-model.number="row.quantity" min="0.01" step="0.01" /></td>
-                <td><div class="price-text">{{ getAvgPrice(row.item).toFixed(2) }}</div></td>
-                <td><input class="note" v-model="row.note" /></td>
+                <td><input type="number" class="qty" v-model.number="outRow.quantity" min="0.01" step="0.01" /></td>
+                <td><div class="price-text">{{ getAvgPrice(outRow.item).toFixed(2) }}</div></td>
+                <td><input class="note" v-model="outRow.note" /></td>
               </tr>
             </tbody>
           </table>
 
           <div class="d-flex justify-content-end">
-            <button class="btn text-center ms-2" @click="submitAll2">送出全部</button>
+            <button class="btn text-center ms-2" @click="submitOut">送出</button>
           </div>
         </div>
       </div>
@@ -669,7 +637,7 @@ const submitReport = async () => {
         <div class="form-wrapper">
           <h5 class="title">出庫總覽查詢</h5>
 
-          <div class="d-flex justify-content-center mt-3">
+          <div class="d-flex justify-content中心 mt-3">
             <div class="d-flex align-items-center gap-3" style="width: 100%; max-width: 330px;">
               <div style="font-size:14px; white-space: nowrap;">日期&ensp;:</div>
               <input type="date" v-model="selectedDate4" class="form-control" style="min-height: 42px;  min-width: 0; flex: 1;" />
@@ -756,7 +724,6 @@ const submitReport = async () => {
 
     <!-- 報表 -->
     <div v-if="currentPage === 'four'">
-      <!-- 報表紀錄 -->
       <div v-if="currentPage4 === 'one-1'">
         <div class="d-flex justify-content-center align-items-center">
           <button style="min-width: 330px;" class="btn mb-3" :class="{ active: currentPage4 === 'two-2' }" @click="() => { currentPage4 = 'two-2'; fetchReportsList() }">報表總覽</button>
@@ -802,12 +769,7 @@ const submitReport = async () => {
                 <td>{{ totalGroup2 === '' ? '' : Number(totalGroup2).toFixed(2) }}</td>
               </tr>
 
-              <tr>
-                <td>&ensp;</td>
-                <td>&ensp;</td>
-                <td>&ensp;</td>
-                <td>&ensp;</td>
-              </tr>
+              <tr><td>&ensp;</td><td>&ensp;</td><td>&ensp;</td><td>&ensp;</td></tr>
 
               <tr class="total-row">
                 <td>總計</td>
@@ -843,7 +805,6 @@ const submitReport = async () => {
         </div>
       </div>
 
-      <!-- 報表總攬 -->
       <div v-else-if="currentPage4 === 'two-2'">
         <div class="d-flex justify-content-center align-items-center">
           <button style="min-width: 330px;" class="btn mb-3" :class="{ active: currentPage4 === 'one-1' }" @click="currentPage4 = 'one-1'">報表紀錄</button>
@@ -858,11 +819,7 @@ const submitReport = async () => {
             <div v-if="reportList.length > 0" style="font-size: 14px;">
               <table class="table report-table">
                 <thead>
-                  <tr>
-                    <th>日期</th>
-                    <th>淨利</th>
-                    <th></th>
-                  </tr>
+                  <tr><th>日期</th><th>淨利</th><th></th></tr>
                 </thead>
                 <tbody>
                   <tr v-for="r in reportList" :key="r._id">
@@ -875,9 +832,7 @@ const submitReport = async () => {
                 </tbody>
               </table>
             </div>
-            <div v-else style="font-size: 14px; color: #888;">
-              目前無資料
-            </div>
+            <div v-else style="font-size: 14px; color: #888;">目前無資料</div>
           </div>
         </div>
       </div>
@@ -886,97 +841,32 @@ const submitReport = async () => {
 </template>
 
 <style scoped>
-/* 原樣式維持 */
-.item {
-  background-color: #b2afaf;
-  width: 50%;
-  cursor: pointer;
-  transition: background-color 0.2s;
-  box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.2);
-}
-.item.active { background-color: #6c6d6e; color: white; }
-.page-content {
-  padding: 20px;
-  min-height: 200px;
-  text-align: center;
-  font-size: 1.2rem;
-}
-input[type="date"] {
-  padding: 8px 24px;
-  font-size: 1rem;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  width: 50%;
-}
-.btn {
-  background-color: #b2afaf;
-  padding:10px;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-  font-size: 12px;
-  width: 20%;
-  white-space: nowrap;
-}
-.btn:hover { background-color: #6c6d6e; color: #ffffff; }
-.form-wrapper {
-  max-width: 800px;
-  margin: 20px auto;
-  padding: 10px;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-}
-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
-th, td { border: none; padding: 4px; text-align: center; font-size: 12px; }
-input {
-  width: 100%;
-  padding: 4px;
-  box-sizing: border-box;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-}
-.delete-btn {
-  border: none;
-  font-size: 8px;
-  cursor: pointer;
-  border-radius: 15px;
-  background-color: #8d0205;
-  color:#ffffff;
-  padding: 6px;
-}
-.update-btn{
-  border: none;
-  font-size: 8px;
-  cursor: pointer;
-  border-radius: 15px;
-  background-color: #1d35d0;
-  color:#ffffff;
-  padding: 6px;
-}
-select { width: 100%; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-td select, td input { min-height: 30px; }
-.items{ min-width: 80px; }
-.qty { min-width: 60px; }
-.price { min-width: 60px; }
-.price-text{ min-width: 60px; }
-.note { min-width: 60px; }
-.button{ max-width: 20px; padding-left: 0px!important; padding-right: 25px!important; }
-input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.title{ color: #ff0000; margin-bottom: 1rem; }
-.clear{
-  border: none; font-size: 8px; cursor: pointer; border-radius: 15px;
-  background-color: #1d35d0; color:#ffffff; padding: 6px;
-}
-.report{ max-width: 50px; }
-.report2{ max-width: 100px; }
-
-.total-row > td { position: relative; padding-top: 16px; }
-.total-row > td::before {
-  content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: #666;
-}
-.total-row > td:first-child::before { left: 20%; width: 100%; }
-.total-row > td:last-child::before { width: 80%; }
-
-.report-table tbody tr { height: 56px; }
-.report-table tbody td { vertical-align: middle; }
+.item { background-color: #b2afaf; width: 50%; cursor: pointer; transition: background-color .2s; box-shadow: 2px 2px 8px rgba(0,0,0,.2);}
+.item.active { background-color: #6c6d6e; color: #fff; }
+.page-content { padding: 20px; min-height: 200px; text-align: center; font-size: 1.2rem; }
+input[type="date"] { padding: 8px 24px; font-size: 1rem; border:1px solid #ccc; border-radius: 4px; width: 50%; }
+.btn { background-color:#b2afaf; padding:10px; border-radius:4px; cursor:pointer; transition: background-color .2s; font-size:12px; width:20%; white-space:nowrap; }
+.btn:hover { background-color:#6c6d6e; color:#fff; }
+.form-wrapper { max-width:800px; margin:20px auto; padding:10px; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,.1); }
+table { width:100%; border-collapse:collapse; margin-bottom:16px; }
+th, td { border:none; padding:4px; text-align:center; font-size:12px; }
+input { width:100%; padding:4px; box-sizing:border-box; border:1px solid #ccc; border-radius:4px; }
+.delete-btn { border:none; font-size:8px; cursor:pointer; border-radius:15px; background:#8d0205; color:#fff; padding:6px; }
+.update-btn { border:none; font-size:8px; cursor:pointer; border-radius:15px; background:#1d35d0; color:#fff; padding:6px; }
+select { width:100%; border:1px solid #ccc; border-radius:4px; box-sizing:border-box; }
+td select, td input { min-height:30px; }
+.items{ min-width:80px; }
+.qty, .price, .price-text, .note { min-width:60px; }
+.button{ max-width:20px; padding-left:0!important; padding-right:25px!important; }
+input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
+.title{ color:#f00; margin-bottom:1rem; }
+.clear{ border:none; font-size:8px; cursor:pointer; border-radius:15px; background:#1d35d0; color:#fff; padding:6px; }
+.report{ max-width:50px; }
+.report2{ max-width:100px; }
+.total-row > td { position:relative; padding-top:16px; }
+.total-row > td::before { content:''; position:absolute; top:0; left:0; width:100%; height:2px; background:#666; }
+.total-row > td:first-child::before { left:20%; width:100%; }
+.total-row > td:last-child::before { width:80%; }
+.report-table tbody tr { height:56px; }
+.report-table tbody td { vertical-align:middle; }
 </style>
