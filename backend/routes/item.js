@@ -1,55 +1,46 @@
-// backend/routes/items.js
-import { Router } from 'express'
+import express from 'express'
 import Item from '../models/item.js'
-import InRecord from '../models/in.js'
-import OutRecord from '../models/out.js'
 
-const router = Router()
+const router = express.Router()
 
 // 取得所有品項
 router.get('/', async (_req, res) => {
-  const list = await Item.find({}).sort({ createdAt: -1 })
-  res.json(list)
+  const items = await Item.find({}).sort({ createdAt: 1 })
+  res.json(items)
 })
 
 // 新增品項
 router.post('/', async (req, res) => {
+  const { name, salePrice } = req.body || {}
+  if (!name) return res.status(400).json({ error: 'name is required' })
   try {
-    const { name, salePrice } = req.body
-    const doc = await Item.create({ name, salePrice: Number(salePrice || 0) })
-    res.json({ ok: true, id: doc._id })
+    const doc = await Item.create({ name: name.trim(), salePrice: Number(salePrice || 0) })
+    res.json(doc)
   } catch (e) {
-    res.status(400).json({ ok: false, message: e.message })
+    res.status(400).json({ error: e?.message || 'create failed' })
   }
 })
 
-// 更新品項（若名稱變更，級聯更新入/出庫的 item 欄位）
+// 更新品項
 router.put('/:id', async (req, res) => {
   const { id } = req.params
-  const { name, salePrice } = req.body
-
-  const old = await Item.findById(id)
-  if (!old) return res.status(404).json({ ok: false, message: 'Not found' })
-
-  const nameChanged = name && name !== old.name
-
-  const updated = await Item.findByIdAndUpdate(
-    id,
-    { name, salePrice: Number(salePrice || 0) },
-    { new: true }
-  )
-
-  if (nameChanged) {
-    await InRecord.updateMany({ item: old.name }, { $set: { item: name } })
-    await OutRecord.updateMany({ item: old.name }, { $set: { item: name } })
+  const { name, salePrice } = req.body || {}
+  try {
+    const doc = await Item.findByIdAndUpdate(
+      id,
+      { $set: { name: name?.trim(), salePrice: Number(salePrice || 0) } },
+      { new: true }
+    )
+    res.json(doc)
+  } catch (e) {
+    res.status(400).json({ error: e?.message || 'update failed' })
   }
-
-  res.json({ ok: true, item: updated })
 })
 
-// 刪除品項（不刪紀錄）
+// 刪除品項（不連動刪既有 in/out 紀錄，只是移除可選清單）
 router.delete('/:id', async (req, res) => {
-  await Item.findByIdAndDelete(req.params.id)
+  const { id } = req.params
+  await Item.findByIdAndDelete(id)
   res.json({ ok: true })
 })
 
