@@ -460,7 +460,7 @@ const submitReport = async () => {
                 <th></th>
                 <th>品項</th>
                 <th>數量</th>
-                <th>價格（整筆）</th>
+                <th>整筆價格</th>
                 <th>備註</th>
               </tr>
             </thead>
@@ -516,7 +516,7 @@ const submitReport = async () => {
                 <th></th>
                 <th>品項</th>
                 <th>數量</th>
-                <th>價格（整筆）</th>
+                <th>整筆價格</th>
                 <th>備註</th>
                 <th v-if="!editingId">日期</th>
               </tr>
@@ -636,7 +636,7 @@ const submitReport = async () => {
                 <th></th>
                 <th>品項</th>
                 <th>數量</th>
-                <th>單價（平均）</th>
+                <th>平均單價</th>
                 <th>備註</th>
               </tr>
             </thead>
@@ -692,7 +692,7 @@ const submitReport = async () => {
                 <th></th>
                 <th>品項</th>
                 <th>數量</th>
-                <th>價格（整筆）</th>
+                <th>整筆價格</th>
                 <th>備註</th>
                 <th v-if="!editingId">日期</th>
               </tr>
