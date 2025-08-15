@@ -3,7 +3,7 @@ import { ref, onMounted, watch, computed } from 'vue'
 import axios from 'axios'
 
 // === API Base ===
-const API = 'https://erp-ahup.onrender.com'
+const API = 'https://erp-ahup.onrender.com' // 換成你的後端網址
 
 // === 分頁狀態 ===
 const currentPage = ref('one')
@@ -30,11 +30,11 @@ const itemOptions = ['檸檬汁', '蘋果汁']
 
 const isLoading = ref(false)
 
-// 報表用
-const totalGroup1 = ref('') // 檸檬汁成本（初始空字串避免一開始就顯示 0）
+// 報表用（價格為整筆金額）
+const totalGroup1 = ref('') // 檸檬汁成本（空字串代表尚未計算）
 const totalGroup2 = ref('') // 蘋果汁成本
-const qtyCake = ref('')     // 對應「檸檬汁份數」
-const qtyJuice = ref('')    // 對應「蘋果汁份數」
+const qtyCake = ref('')     // 檸檬汁份數
+const qtyJuice = ref('')    // 蘋果汁份數
 
 const unitPriceCake = 50
 const unitPriceJuice = 60
@@ -56,7 +56,7 @@ const isEmpty = (v) => v === '' || v === null || v === undefined
 const isRowEmptyIn = (row) => !row.item && isEmpty(row.quantity) && isEmpty(row.price)
 const isRowCompleteIn = (row) =>
   !!row.item && !isEmpty(row.quantity) && Number(row.quantity) > 0 &&
-  !isEmpty(row.price) && Number(row.price) >= 0   // 整筆總價允許 0
+  !isEmpty(row.price) && Number(row.price) > 0
 
 const isRowEmptyOut = (row) => !row.item && isEmpty(row.quantity)
 const isRowCompleteOut = (row) =>
@@ -84,18 +84,18 @@ function checkOutStock () {
 
 const getAvgPrice = (item) => {
   const found = itemSummary.value.find(i => i.item === item)
-  return found && found.quantity > 0 ? found.avgPrice : 0
+  return found ? found.avgPrice : 0
 }
 
 // 入/出庫輸入列
 const rows = ref(Array.from({ length: 5 }, () => ({ item: '', quantity: '', price: '', note: '' })))
 const rows2 = ref(Array.from({ length: 5 }, () => ({ item: '', quantity: '', price: '', note: '' })))
 
-// 送出入庫（price = 整筆總價，直接照填）
+// 送出入庫（price 為整筆金額）
 const submitAll = async () => {
   if (!selectedDate.value) { alert('❌ 請選擇日期'); return }
   const hasIncomplete = rows.value.some(r => !isRowEmptyIn(r) && !isRowCompleteIn(r))
-  if (hasIncomplete) { alert('❌ 入庫：每一列要嘛空白、要嘛品項/數量/總價都填好（數量>0；總價≥0）'); return }
+  if (hasIncomplete) { alert('❌ 入庫：每列要嘛空白、要嘛品項/數量/價格都填好（數量/價格需 > 0）'); return }
   const validRows = rows.value.filter(isRowCompleteIn)
   if (validRows.length === 0) { alert('❌ 入庫：請至少填寫一列完整資料'); return }
 
@@ -110,20 +110,19 @@ const submitAll = async () => {
   }
 }
 
-// 送出出庫（price = 平均單價 × 數量 → 存整筆總價）
+// 送出出庫（price 由「平均單價 × 數量」計算為整筆金額）
 const submitAll2 = async () => {
   if (!selectedDate3.value) { alert('❌ 請選擇日期'); return }
   const hasIncomplete = rows2.value.some(r => !isRowEmptyOut(r) && !isRowCompleteOut(r))
-  if (hasIncomplete) { alert('❌ 出庫：每一列要嘛空白、要嘛品項/數量都填好（數量>0，且平均單價>0）'); return }
+  if (hasIncomplete) { alert('❌ 出庫：每列要嘛空白、要嘛品項/數量都填好（數量需 > 0，且平均單價需 > 0）'); return }
   const validRows = rows2.value.filter(isRowCompleteOut)
   if (validRows.length === 0) { alert('❌ 出庫：請至少填寫一列完整資料'); return }
   if (!checkOutStock()) return
 
   try {
     const dataWithDate = validRows.map(row => {
-      const avg = getAvgPrice(row.item)
-      const qty = Number(row.quantity)
-      const total = avg * qty
+      const avgUnit = getAvgPrice(row.item) // 單位成本
+      const total = Math.round(avgUnit * Number(row.quantity) * 100) / 100 // 整筆金額
       return { ...row, date: selectedDate3.value, price: total }
     })
     const { data } = await axios.post(`${API}/outrecords`, dataWithDate)
@@ -178,7 +177,7 @@ const fetchRecords3 = async () => {
   }
 }
 
-// 報表單日成本（直接加總當日出庫「整筆總價」）
+// 報表單日成本（後端已改成加總整筆金額）
 const fetchTotalAmount = async () => {
   if (!selectedDate5.value) { totalGroup1.value = ''; totalGroup2.value = ''; return }
   try {
@@ -321,21 +320,22 @@ const deleteReportByDate = async (dateStr) => {
   }
 }
 
-// 庫存彙總（整筆總價直接相加）
+// 《庫存彙總》重點：price 是整筆金額
 const itemSummary = computed(() => {
   const summary = []
   for (const item of itemOptions) {
     const inRecords = recordList.value.filter(r => r.item === item)
     const inQty = inRecords.reduce((sum, r) => sum + Number(r.quantity), 0)
-    const inTotalPrice = inRecords.reduce((sum, r) => sum + Number(r.price), 0) // 整筆總價
+    const inTotalPrice = inRecords.reduce((sum, r) => sum + Number(r.price), 0) // 不再乘以 quantity
 
     const outRecords = recordList2.value.filter(r => r.item === item)
     const outQty = outRecords.reduce((sum, r) => sum + Number(r.quantity), 0)
-    const outTotalPrice = outRecords.reduce((sum, r) => sum + Number(r.price), 0) // 整筆總價
+    const outTotalPrice = outRecords.reduce((sum, r) => sum + Number(r.price), 0) // 不再乘以 quantity
 
     const stockQty = inQty - outQty
     const stockTotalPrice = inTotalPrice - outTotalPrice
-    const avgPrice = stockQty > 0 ? (stockTotalPrice / stockQty) : 0
+    const avgPrice = stockQty > 0 ? stockTotalPrice / stockQty : 0 // 單位平均成本
+
     summary.push({ item, quantity: stockQty, avgPrice, totalPrice: stockTotalPrice })
   }
   return summary
@@ -454,7 +454,7 @@ const submitReport = async () => {
                 <th></th>
                 <th>品項</th>
                 <th>數量</th>
-                <th>總價(整筆)</th>
+                <th>價格（整筆）</th>
                 <th>備註</th>
               </tr>
             </thead>
@@ -466,8 +466,8 @@ const submitReport = async () => {
                     <option v-for="option in itemOptions" :key="option" :value="option">{{ option }}</option>
                   </select>
                 </td>
-                <td><input type="number" class="qty" v-model.number="row.quantity" min="1" /></td>
-                <td><input type="number" class="price" v-model.number="row.price" min="0" /></td>
+                <td><input type="number" class="qty" v-model.number="row.quantity" min="0.01" step="0.01" /></td>
+                <td><input type="number" class="price" v-model.number="row.price" min="0" step="0.01" /></td>
                 <td><input class="note" v-model="row.note" /></td>
               </tr>
             </tbody>
@@ -510,7 +510,7 @@ const submitReport = async () => {
                 <th></th>
                 <th>品項</th>
                 <th>數量</th>
-                <th>總價</th>
+                <th>價格（整筆）</th>
                 <th>備註</th>
                 <th v-if="!editingId">日期</th>
               </tr>
@@ -537,16 +537,16 @@ const submitReport = async () => {
 
                 <td class="qty">
                   <template v-if="editingId === record._id">
-                    <input type="number" v-model.number="record.quantity" min="1" />
+                    <input type="number" v-model.number="record.quantity" min="0.01" step="0.01" />
                   </template>
                   <template v-else>{{ record.quantity }}</template>
                 </td>
 
                 <td class="price">
                   <template v-if="editingId === record._id">
-                    <input type="number" v-model.number="record.price" min="0" />
+                    <input type="number" v-model.number="record.price" min="0" step="0.01" />
                   </template>
-                  <template v-else>{{ record.price.toFixed(2) }}</template>
+                  <template v-else>{{ Number(record.price).toFixed(2) }}</template>
                 </td>
 
                 <td class="note">
@@ -595,7 +595,7 @@ const submitReport = async () => {
                   <td>{{ record.item }}</td>
                   <td>{{ record.quantity }}</td>
                   <td>{{ record.avgPrice.toFixed(2) }}</td>
-                  <td>{{ (Number(record.totalPrice) || 0).toFixed(2) }}</td>
+                  <td>{{ Math.round(Number(record.totalPrice) || 0) }}</td>
                 </tr>
               </tbody>
             </table>
@@ -630,7 +630,7 @@ const submitReport = async () => {
                 <th></th>
                 <th>品項</th>
                 <th>數量</th>
-                <th>單價(平均)</th>
+                <th>單位成本(參考)</th>
                 <th>備註</th>
               </tr>
             </thead>
@@ -642,7 +642,7 @@ const submitReport = async () => {
                     <option v-for="option in itemOptions" :key="option" :value="option">{{ option }}</option>
                   </select>
                 </td>
-                <td><input type="number" class="qty" v-model.number="row.quantity" min="1" /></td>
+                <td><input type="number" class="qty" v-model.number="row.quantity" min="0.01" step="0.01" /></td>
                 <td><div class="price-text">{{ getAvgPrice(row.item).toFixed(2) }}</div></td>
                 <td><input class="note" v-model="row.note" /></td>
               </tr>
@@ -686,7 +686,7 @@ const submitReport = async () => {
                 <th></th>
                 <th>品項</th>
                 <th>數量</th>
-                <th>總價</th>
+                <th>價格（整筆）</th>
                 <th>備註</th>
                 <th v-if="!editingId">日期</th>
               </tr>
@@ -713,16 +713,16 @@ const submitReport = async () => {
 
                 <td class="qty">
                   <template v-if="editingId === record._id">
-                    <input type="number" v-model.number="record.quantity" min="1" />
+                    <input type="number" v-model.number="record.quantity" min="0.01" step="0.01" />
                   </template>
                   <template v-else>{{ record.quantity }}</template>
                 </td>
 
                 <td class="price">
                   <template v-if="editingId === record._id">
-                    <input type="number" v-model.number="record.price" min="0" />
+                    <input type="number" v-model.number="record.price" min="0" step="0.01" />
                   </template>
-                  <template v-else>{{ record.price.toFixed(2) }}</template>
+                  <template v-else>{{ Number(record.price).toFixed(2) }}</template>
                 </td>
 
                 <td class="note">
@@ -880,6 +880,7 @@ const submitReport = async () => {
 </template>
 
 <style scoped>
+/* 原樣式完全不變或小幅調整文字 */
 .item {
   background-color: #b2afaf;
   width: 50%;
@@ -970,6 +971,7 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
 .total-row > td:first-child::before { left: 20%; width: 100%; }
 .total-row > td:last-child::before { width: 80%; }
 
+/* 只有「報表總攬」行高加大、刪按鈕垂直置中 */
 .report-table tbody tr { height: 56px; }
 .report-table tbody td { vertical-align: middle; }
 </style>
