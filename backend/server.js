@@ -1,4 +1,3 @@
-// backend/server.js
 import express from 'express'
 import mongoose from 'mongoose'
 import cors from 'cors'
@@ -6,7 +5,6 @@ import dotenv from 'dotenv'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
-// 路由
 import InRoutes from './routes/in.js'
 import OutRoutes from './routes/out.js'
 import ReportRoutes from './routes/report.js'
@@ -18,34 +16,28 @@ const app = express()
 app.use(cors())
 app.use(express.json())
 
-// 健康檢查
+// --- API ---
 app.get('/health', (_req, res) => res.json({ ok: true }))
-
-// 掛 API 路由
 app.use('/records', InRoutes)
 app.use('/outrecords', OutRoutes)
 app.use('/reports', ReportRoutes)
 app.use('/items', ItemRoutes)
 
-// ---- 靜態檔案（production 同站服務前端） ----
+// --- 靜態檔案 (前端 dist) ---
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const clientDist = path.resolve(__dirname, '../frontend/dist')
 
 app.use(express.static(clientDist))
-
-// SPA fallback（避免吃到 API 路由）
 app.get('*', (req, res) => {
   res.sendFile(path.join(clientDist, 'index.html'))
 })
 
 const PORT = Number(process.env.PORT) || 3000
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/mydb'
-
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/erpdb'
 mongoose.set('strictQuery', true)
 
-mongoose
-  .connect(MONGO_URI)
+mongoose.connect(MONGO_URI)
   .then(() => {
     app.listen(PORT, () => {
       console.log(`✅ Server running at http://localhost:${PORT}`)

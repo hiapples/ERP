@@ -4,7 +4,6 @@ import Item from '../models/item.js'
 
 const router = express.Router()
 
-// 取得出庫資料（可加 query: date, item）
 router.get('/', async (req, res) => {
   const { date, item } = req.query
   const cond = {}
@@ -14,8 +13,6 @@ router.get('/', async (req, res) => {
   res.json(list)
 })
 
-// 新增出庫：支援「單筆」或「陣列」
-// 注意：price 為整筆金額（前端已用平均單價×數量算好）
 router.post('/', async (req, res) => {
   const body = req.body
   const toSave = Array.isArray(body) ? body : [body]
@@ -30,7 +27,6 @@ router.post('/', async (req, res) => {
   res.json({ inserted: ret.length, ids: ret.map(d => d._id) })
 })
 
-// 更新
 router.put('/:id', async (req, res) => {
   const { id } = req.params
   const r = req.body || {}
@@ -50,7 +46,6 @@ router.put('/:id', async (req, res) => {
   res.json(doc)
 })
 
-// 刪除
 router.delete('/:id', async (req, res) => {
   const { id } = req.params
   await OutRecord.findByIdAndDelete(id)
@@ -58,9 +53,7 @@ router.delete('/:id', async (req, res) => {
 })
 
 /**
- * 報表用：計算某日兩個主要品項的「銷貨成本」（整筆金額加總）
- * 取 items 集合中的前兩個（createdAt 早→晚）
- * 回傳：{ totalGroup1, totalGroup2, item1Name, item2Name }
+ * 舊：回傳前兩品項的成本合計（保留相容）
  */
 router.get('/total/:date', async (req, res) => {
   const { date } = req.params
@@ -79,6 +72,24 @@ router.get('/total/:date', async (req, res) => {
   const totalGroup2 = Number((await sumFor(name2)).toFixed(2))
 
   res.json({ totalGroup1, totalGroup2, item1Name: name1 || '', item2Name: name2 || '' })
+})
+
+/**
+ * 新：回傳該日「每個品項」的成本合計
+ * { totals: { [itemName]: number } }
+ */
+router.get('/totalByItem/:date', async (req, res) => {
+  const { date } = req.params
+  const list = await OutRecord.find({ date })
+  const totals = {}
+  for (const r of list) {
+    totals[r.item] = (totals[r.item] || 0) + Number(r.price || 0)
+  }
+  // 固定到兩位小數
+  for (const k of Object.keys(totals)) {
+    totals[k] = Number(totals[k].toFixed(2))
+  }
+  res.json({ totals })
 })
 
 export default router

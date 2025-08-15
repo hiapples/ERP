@@ -3,7 +3,6 @@ import InRecord from '../models/in.js'
 
 const router = express.Router()
 
-// 取得入庫資料（可加 query: date, item）
 router.get('/', async (req, res) => {
   const { date, item } = req.query
   const cond = {}
@@ -13,7 +12,6 @@ router.get('/', async (req, res) => {
   res.json(list)
 })
 
-// 新增入庫：支援「單筆」或「陣列」
 router.post('/', async (req, res) => {
   const body = req.body
   const toSave = Array.isArray(body) ? body : [body]
@@ -28,7 +26,6 @@ router.post('/', async (req, res) => {
   res.json({ inserted: ret.length, ids: ret.map(d => d._id) })
 })
 
-// 更新
 router.put('/:id', async (req, res) => {
   const { id } = req.params
   const r = req.body || {}
@@ -48,7 +45,6 @@ router.put('/:id', async (req, res) => {
   res.json(doc)
 })
 
-// 刪除
 router.delete('/:id', async (req, res) => {
   const { id } = req.params
   await InRecord.findByIdAndDelete(id)

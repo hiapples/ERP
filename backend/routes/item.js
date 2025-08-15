@@ -3,13 +3,11 @@ import Item from '../models/item.js'
 
 const router = express.Router()
 
-// 取得所有品項
 router.get('/', async (_req, res) => {
   const items = await Item.find({}).sort({ createdAt: 1 })
   res.json(items)
 })
 
-// 新增品項
 router.post('/', async (req, res) => {
   const { name, salePrice } = req.body || {}
   if (!name) return res.status(400).json({ error: 'name is required' })
@@ -21,7 +19,6 @@ router.post('/', async (req, res) => {
   }
 })
 
-// 更新品項
 router.put('/:id', async (req, res) => {
   const { id } = req.params
   const { name, salePrice } = req.body || {}
@@ -37,7 +34,6 @@ router.put('/:id', async (req, res) => {
   }
 })
 
-// 刪除品項（不連動刪既有 in/out 紀錄，只是移除可選清單）
 router.delete('/:id', async (req, res) => {
   const { id } = req.params
   await Item.findByIdAndDelete(id)
