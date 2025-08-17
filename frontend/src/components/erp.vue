@@ -22,7 +22,7 @@ const selectedDate5 = ref(today)
 
 // 清單
 const recordList = ref([])   // 入庫（原料）
-const recordList2 = ref([])  // 出庫（以綁定原料扣）
+const recordList2 = ref([])  // 出庫（以綁定原料扣或舊資料為成品名）
 const isLoading = ref(false)
 
 // 品項（動態從 DB）
@@ -32,12 +32,8 @@ const items = ref([])
 
 // 防呆：items 不是陣列也不炸
 const _arr = (v) => (Array.isArray(v) ? v : (Array.isArray(v?.items) ? v.items : []))
-const rawItems = computed(() =>
-  _arr(items.value).filter(i => i?.type === 'raw')
-)
-const productItems = computed(() =>
-  _arr(items.value).filter(i => i?.type === 'product')
-)
+const rawItems = computed(() => _arr(items.value).filter(i => i?.type === 'raw'))
+const productItems = computed(() => _arr(items.value).filter(i => i?.type === 'product'))
 
 // 入庫只選原料；出庫只選成品（維持原樣式）
 const inOptions  = computed(() => rawItems.value.map(i => i?.name).filter(Boolean))
@@ -45,13 +41,12 @@ const outOptions = computed(() => productItems.value.map(i => i?.name).filter(Bo
 
 // 單筆輸入（維持原本表格欄位）
 const inRow  = ref({ item: '', quantity: '', price: '', note: '' })  // 原料入庫
-const outRow = ref({ item: '', quantity: '', note: '' })             // 成品出庫（會轉扣原料）
-// 出庫平均單價「自動設定為綁定原料的平均單價」（唯讀顯示）
-const outUnitPrice = ref('') // 自動帶入，不可手動編輯
+const outRow = ref({ item: '', quantity: '', note: '' })             // 成品出庫（轉扣原料）
+const outUnitPrice = ref('') // 出庫平均單價：自動帶入綁定原料的平均單價（唯讀顯示）
 
 const editingId = ref(null)
 const selectedItem  = ref('') // 入庫查詢用（原料）
-const selectedItem2 = ref('') // 出庫查詢用（原料名，因實際扣的是原料）
+const selectedItem2 = ref('') // 出庫查詢用（品項=原料）
 
 // === 入/出庫共用 ===
 const isEmpty = (v) => v === '' || v === null || v === undefined
@@ -116,15 +111,32 @@ const fetchRecords3 = async () => {
 }
 
 // === 平均成本(以整筆金額加權) & 庫存彙總（僅原料） ===
+// 重點：出庫扣量同時考慮兩種型態：
+//  1) 新制：outrecords.item === 原料名
+//  2) 舊制：outrecords.item === 成品名（依成品綁定的原料來歸戶）
 const itemSummary = computed(() => {
   const names = inOptions.value
   const summary = []
+
+  // 建立「成品名 -> 綁定原料」對照
+  const prodToRaw = {}
+  for (const p of productItems.value) {
+    if (p?.name && p?.bindRaw) prodToRaw[p.name] = p.bindRaw
+  }
+
   for (const item of names) {
     const inRecords  = recordList.value.filter(r => r?.item === item)
-    const outRecords = recordList2.value.filter(r => r?.item === item)
+
+    // 出庫：直接扣該原料
+    const outByRaw   = recordList2.value.filter(r => r?.item === item)
+    // 出庫：以成品名出（舊資料），且該成品綁定此原料
+    const outByProd  = recordList2.value.filter(r => prodToRaw[r?.item] === item)
+
+    const outRecords = [...outByRaw, ...outByProd]
 
     const inQty      = inRecords.reduce((s, r) => s + Number(r?.quantity), 0)
     const inSumPrice = inRecords.reduce((s, r) => s + Number(r?.price), 0)
+
     const outQty     = outRecords.reduce((s, r) => s + Number(r?.quantity), 0)
     const outSum     = outRecords.reduce((s, r) => s + Number(r?.price), 0)
 
@@ -149,7 +161,7 @@ function getBinding(productName) {
   return { rawName: p.bindRaw }
 }
 
-// 出庫選擇的成品或庫存資料更新時，自動帶入對應原料的平均單價（唯讀）
+// 出庫選擇或資料更新時，自動帶入對應原料的平均單價（唯讀）
 function autoFillOutUnitPrice() {
   const bind = getBinding(outRow.value.item)
   if (bind?.rawName) outUnitPrice.value = Number(getAvgPrice(bind.rawName).toFixed(2))
@@ -173,11 +185,18 @@ function checkOutStock () {
   const inQty = recordList.value
     .filter(r => r?.item === rawName)
     .reduce((s, r) => s + Number(r?.quantity), 0)
-  const outQty = recordList2.value
+
+  // 同步考量舊制（以成品名扣，理論上本頁不會新增舊制，但為安全仍計入）
+  const prodToRaw = {}
+  for (const p of productItems.value) if (p?.name && p?.bindRaw) prodToRaw[p.name] = p.bindRaw
+  const outQtyRaw = recordList2.value
     .filter(r => r?.item === rawName)
     .reduce((s, r) => s + Number(r?.quantity), 0)
+  const outQtyProd = recordList2.value
+    .filter(r => prodToRaw[r?.item] === rawName)
+    .reduce((s, r) => s + Number(r?.quantity), 0)
 
-  const left = inQty - outQty
+  const left = inQty - (outQtyRaw + outQtyProd)
   if (needQty > left + 1e-9) {
     alert(`❌【${rawName}】庫存不足，需要 ${needQty.toFixed(2)}g，現有 ${left.toFixed(2)}g`)
     return false
@@ -220,8 +239,7 @@ const submitOut = async () => {
   try {
     const rawName   = bind.rawName
     const rawQty    = Number(Number(row.quantity).toFixed(2)) // 直接視為原料扣量(g)
-    // 再次以最新平均單價計算（與 outUnitPrice 顯示一致）
-    const unit      = Number(getAvgPrice(rawName))
+    const unit      = Number(getAvgPrice(rawName))            // 以綁定原料的平均單價
     const lineTotal = Number((unit * rawQty).toFixed(2))
 
     const payload = {
@@ -275,7 +293,7 @@ const deleteRecord2 = async (id) => {
   catch (err) { alert('❌ 刪除失敗：' + err.message) }
 }
 
-// === 品項設定（恢復原樣式；成品要有售價；可綁定原料） ===
+// === 品項設定（恢復原本風格；成品要有售價；可綁定原料） ===
 const itemEditingId = ref(null)
 const newRaw = ref({ name: '' })
 const newProduct = ref({ name: '', salePrice: '', bindRaw: '' })
@@ -601,7 +619,7 @@ watch(currentPage4, async (p) => {
         </button>
       </div>
 
-      <!-- 庫存總覽（僅原料） -->
+      <!-- 庫存總覽（僅原料；會扣除綁定成品的出庫） -->
       <div v-if="currentPageStock === 'one-1'" class="form-wrapper">
         <h5 class="title">庫存總覽</h5>
         <div v-if="isLoading" style="font-size:14px;color:#888;">載入中...</div>
@@ -658,7 +676,7 @@ watch(currentPage4, async (p) => {
         <h6 class="text-start mb-2 mt-4">成品</h6>
         <table class="table">
           <thead><tr><th>成品名稱</th><th>售價</th><th>綁定原料</th><th style="width:160px;"></th></tr></thead>
-          <tbody>
+        <tbody>
             <tr v-for="it in productItems" :key="it._id">
               <td>
                 <template v-if="itemEditingId === it._id"><input v-model="it.name" /></template>
@@ -730,9 +748,7 @@ watch(currentPage4, async (p) => {
                   </select>
                 </td>
                 <td><input type="number" class="qty" v-model.number="outRow.quantity" min="0.01" step="0.01" /></td>
-                <td>
-                  <input type="number" class="price" :value="outUnitPrice" disabled />
-                </td>
+                <td><input type="number" class="price" :value="outUnitPrice" disabled /></td>
                 <td><input class="note" v-model="outRow.note" /></td>
               </tr>
             </tbody>
@@ -742,6 +758,7 @@ watch(currentPage4, async (p) => {
         </div>
       </div>
 
+      <!-- 出庫總覽（樣式對齊入庫總覽：日期 + 品項(原料) 篩選；欄位一致） -->
       <div v-else-if="currentPage3 === 'two-2'">
         <div class="d-flex justify-content-center align-items-center">
           <button style="min-width:330px;" class="btn mb-3" :class="{ active: currentPage3 === 'one-1' }" @click="currentPage3 = 'one-1'">新增出庫</button>
@@ -759,7 +776,7 @@ watch(currentPage4, async (p) => {
 
           <div class="d-flex justify-content-center mt-3">
             <div class="d-flex align-items-center gap-3 mb-3" style="width:100%;max-width:330px;">
-              <div style="font-size:14px;white-space:nowrap;">原料&ensp;:</div>
+              <div style="font-size:14px;white-space:nowrap;">品項&ensp;:</div>
               <select v-model="selectedItem2" style="min-height:42px;font-size:14px;flex:1;">
                 <option value=""></option>
                 <option v-for="option in inOptions" :key="option" :value="option">{{ option }}</option>
@@ -768,7 +785,7 @@ watch(currentPage4, async (p) => {
           </div>
 
           <table>
-            <thead><tr><th></th><th>原料</th><th>扣量</th><th>整筆金額</th><th>備註</th><th v-if="!editingId">日期</th></tr></thead>
+            <thead><tr><th></th><th>品項</th><th>數量</th><th>整筆價格</th><th>備註</th><th v-if="!editingId">日期</th></tr></thead>
             <tbody>
               <tr v-for="record in recordList2" :key="record._id">
                 <td class="button">
@@ -926,7 +943,7 @@ input { width:100%; padding:4px; box-sizing:border-box; border:1px solid #ccc; b
 select { width:100%; border:1px solid #ccc; border-radius:4px; box-sizing:border-box; }
 td select, td input { min-height:30px; }
 
-/* 還原原本的欄寬 */
+/* 保持原本欄寬設定 */
 .items{ min-width:80px; }
 .qty, .price, .price-text, .note { min-width:60px; }
 .button{ max-width:20px; padding-left:0!important; padding-right:25px!important; }
