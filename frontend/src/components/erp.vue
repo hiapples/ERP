@@ -548,11 +548,30 @@ watch(currentPage4, async (p) => {
 
     <!-- 庫存 -->
     <div v-else-if="currentPage === 'two'">
+      <!-- 庫存：單顆切換按鈕（跟其他頁一致） -->
       <div class="d-flex justify-content-center align-items-center">
-        <button style="min-width:330px;" class="btn mb-3" :class="{ active: currentPageStock === 'one-1' }" @click="currentPageStock = 'one-1'">庫存總覽</button>
-        <button style="min-width:330px;" class="btn mb-3 ms-2" :class="{ active: currentPageStock === 'two-2' }" @click="currentPageStock = 'two-2'">品項設定</button>
-      </div>
+        <!-- 當前在庫存總覽 → 顯示「品項設定」按鈕 -->
+        <button
+          v-if="currentPageStock === 'one-1'"
+          style="min-width: 330px;"
+          class="btn mb-3"
+          :class="{ active: currentPageStock === 'two-2' }"
+          @click="() => { currentPageStock = 'two-2'; fetchItems() }"
+        >
+          品項設定
+        </button>
 
+        <!-- 當前在品項設定 → 顯示「庫存總覽」按鈕 -->
+        <button
+          v-else
+          style="min-width: 330px;"
+          class="btn mb-3"
+          :class="{ active: currentPageStock === 'one-1' }"
+          @click="() => { currentPageStock = 'one-1'; fetchRecords3() }"
+        >
+          庫存總覽
+        </button>
+      </div>
       <!-- 庫存總覽 -->
       <div v-if="currentPageStock === 'one-1'" class="form-wrapper">
         <h5 class="title">庫存總覽</h5>
