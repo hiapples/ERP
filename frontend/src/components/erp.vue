@@ -22,23 +22,37 @@ const selectedDate5 = ref(today)
 
 // 清單
 const recordList = ref([])   // 入庫（原料）
-const recordList2 = ref([])  // 出庫（以原料名義扣）
+const recordList2 = ref([])  // 出庫（這裡會以原料名義扣）
 const isLoading = ref(false)
 
 // 品項（動態從 DB）
-// 原料：{ _id, name, type:'raw' }
-// 成品：{ _id, name, salePrice, type:'product', bindRaw:'原料名稱' }
+// 原料：{ _id, name, salePrice, type:'raw' }
+// 成品：{ _id, name, salePrice, type:'product', bindRaw:'原料名稱', ratio: 每份原料用量 }
 const items = ref([])
-const rawItems = computed(() => items.value.filter(i => i.type === 'raw'))
-const productItems = computed(() => items.value.filter(i => i.type === 'product'))
 
-// 入庫只選原料；出庫只選成品
-const inOptions  = computed(() => rawItems.value.map(i => i.name))
-const outOptions = computed(() => productItems.value.map(i => i.name))
+// 這兩個 computed 加上防呆，確保 items.value 不是陣列時也不會炸
+const rawItems = computed(() =>
+  (Array.isArray(items.value) ? items.value : []).filter(i => i?.type === 'raw')
+)
+const productItems = computed(() =>
+  (Array.isArray(items.value) ? items.value : []).filter(i => i?.type === 'product')
+)
 
-// 單筆輸入（維持原樣）
-const inRow  = ref({ item: '', quantity: '', price: '', note: '' })  // 原料入庫（價格為整筆）
-const outRow = ref({ item: '', quantity: '', unitPrice: '', note: '' }) // 成品出庫（平均單價可手動輸入）
+// 入庫只選原料；出庫只選成品（也做防呆與過濾空字串）
+const inOptions  = computed(() => rawItems.value.map(i => i?.name).filter(Boolean))
+const outOptions = computed(() => productItems.value.map(i => i?.name).filter(Boolean))
+
+// 以「原料群組」方式呈現（原料 + 該原料底下的成品們）
+const groups = computed(() =>
+  rawItems.value.map(r => ({
+    raw: r,
+    products: productItems.value.filter(p => p?.bindRaw === r?.name)
+  }))
+)
+
+// 單筆輸入
+const inRow  = ref({ item: '', quantity: '', price: '', note: '' })  // 原料入庫
+const outRow = ref({ item: '', quantity: '', note: '' })             // 成品出庫（會轉扣原料）
 
 const editingId = ref(null)
 const selectedItem  = ref('') // 入庫查詢用（原料）
@@ -50,26 +64,20 @@ const isRowCompleteIn = (row) =>
   !!row.item && !isEmpty(row.quantity) && Number(row.quantity) > 0 &&
   !isEmpty(row.price) && Number(row.price) >= 0
 const isRowCompleteOut = (row) =>
-  !!row.item && !isEmpty(row.quantity) && Number(row.quantity) > 0 &&
-  !isEmpty(row.unitPrice) && Number(row.unitPrice) >= 0
+  !!row.item && !isEmpty(row.quantity) && Number(row.quantity) > 0
 
 function clearIn () { inRow.value = { item: '', quantity: '', price: '', note: '' } }
-function clearOut () { outRow.value = { item: '', quantity: '', unitPrice: '', note: '' } }
+function clearOut () { outRow.value = { item: '', quantity: '', note: '' } }
 
-// === 讀取品項 ===
+// === 讀取品項（防呆：允許回傳 Array 或 { items:[...] }） ===
 async function fetchItems () {
-  const { data } = await axios.get(`${API}/items`)
-  items.value = data || []
+  const res = await axios.get(`${API}/items`)
+  const raw = res?.data
+  const arr = Array.isArray(raw) ? raw : (Array.isArray(raw?.items) ? raw.items : [])
+  items.value = Array.isArray(arr) ? arr : []
 }
 
-// 綁定工具（成品 -> 原料名）
-function findProduct(name) { return productItems.value.find(p => p.name === name) || null }
-function getBindRaw(productName) {
-  const p = findProduct(productName)
-  return p && p.bindRaw ? p.bindRaw : null
-}
-
-// === 入庫/出庫資料讀取（維持原查詢方式與表格） ===
+// === 入庫/出庫資料讀取（也做防呆，避免後端回傳非陣列型態） ===
 const fetchRecords = async () => {
   try {
     let url = `${API}/records`
@@ -78,7 +86,7 @@ const fetchRecords = async () => {
     if (selectedItem.value)  q.push('item=' + encodeURIComponent(selectedItem.value))
     if (q.length) url += '?' + q.join('&')
     const { data } = await axios.get(url)
-    recordList.value = data
+    recordList.value = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : [])
   } catch (err) {
     alert('❌ 無法取得入庫資料：' + err.message)
   }
@@ -91,7 +99,7 @@ const fetchRecords2 = async () => {
     if (selectedItem2.value) q.push('item=' + encodeURIComponent(selectedItem2.value)) // 以原料名查
     if (q.length) url += '?' + q.join('&')
     const { data } = await axios.get(url)
-    recordList2.value = data
+    recordList2.value = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : [])
   } catch (err) {
     alert('❌ 無法取得出庫資料：' + err.message)
   }
@@ -103,8 +111,10 @@ const fetchRecords3 = async () => {
       axios.get(`${API}/records`),
       axios.get(`${API}/outrecords`)
     ])
-    recordList.value = inRes.data
-    recordList2.value = outRes.data
+    const inData = inRes?.data
+    const outData = outRes?.data
+    recordList.value  = Array.isArray(inData)  ? inData  : (Array.isArray(inData?.items)  ? inData.items  : [])
+    recordList2.value = Array.isArray(outData) ? outData : (Array.isArray(outData?.items) ? outData.items : [])
   } catch (err) {
     alert('❌ 取得庫存資料失敗：' + err.message)
   } finally {
@@ -112,18 +122,18 @@ const fetchRecords3 = async () => {
   }
 }
 
-// === 平均成本(以整筆金額加權) & 庫存彙總（僅原料；維持原樣呈現） ===
+// === 平均成本(以整筆金額加權) & 庫存彙總（僅原料） ===
 const itemSummary = computed(() => {
   const names = inOptions.value
   const summary = []
   for (const item of names) {
-    const inRecords  = recordList.value.filter(r => r.item === item)
-    const outRecords = recordList2.value.filter(r => r.item === item)
+    const inRecords  = recordList.value.filter(r => r?.item === item)
+    const outRecords = recordList2.value.filter(r => r?.item === item)
 
-    const inQty      = inRecords.reduce((s, r) => s + Number(r.quantity), 0)
-    const inSumPrice = inRecords.reduce((s, r) => s + Number(r.price), 0)
-    const outQty     = outRecords.reduce((s, r) => s + Number(r.quantity), 0)
-    const outSum     = outRecords.reduce((s, r) => s + Number(r.price), 0)
+    const inQty      = inRecords.reduce((s, r) => s + Number(r?.quantity), 0)
+    const inSumPrice = inRecords.reduce((s, r) => s + Number(r?.price), 0)
+    const outQty     = outRecords.reduce((s, r) => s + Number(r?.quantity), 0)
+    const outSum     = outRecords.reduce((s, r) => s + Number(r?.price), 0)
 
     const stockQty        = inQty - outQty
     const stockTotalPrice = inSumPrice - outSum
@@ -138,23 +148,33 @@ const getAvgPrice = (rawName) => {
   return f ? f.avgPrice : 0
 }
 
-// === 出庫時檢查庫存（檢查綁定原料是否足夠；無用量=1:1 扣量） ===
+// 綁定工具
+function findProduct(name) { return productItems.value.find(p => p?.name === name) || null }
+function getBinding(productName) {
+  const p = findProduct(productName)
+  if (!p || !p.bindRaw || !p.ratio) return null
+  return { rawName: p.bindRaw, ratio: Number(p.ratio) }
+}
+const selectedBinding = computed(() => getBinding(outRow.value.item))
+
+// === 出庫時檢查庫存（檢查綁定的原料是否足夠） ===
 function checkOutStock () {
   const row = outRow.value
   if (!row.item || !row.quantity) return true
-  const rawName = getBindRaw(row.item)
-  if (!rawName) {
-    alert('❌ 此成品尚未綁定原料，請先到「品項設定」綁定')
+  const bind = getBinding(row.item)
+  if (!bind) {
+    alert('❌ 此成品尚未綁定原料與用量，請先到「品項設定」綁定')
     return false
   }
-  const needQty = Number(row.quantity) // 無用量設定，等同 1:1
+  const rawName = bind.rawName
+  const needQty = Number(row.quantity) * Number(bind.ratio)
 
   const inQty = recordList.value
-    .filter(r => r.item === rawName)
-    .reduce((s, r) => s + Number(r.quantity), 0)
+    .filter(r => r?.item === rawName)
+    .reduce((s, r) => s + Number(r?.quantity), 0)
   const outQty = recordList2.value
-    .filter(r => r.item === rawName)
-    .reduce((s, r) => s + Number(r.quantity), 0)
+    .filter(r => r?.item === rawName)
+    .reduce((s, r) => s + Number(r?.quantity), 0)
 
   const left = inQty - outQty
   if (needQty > left + 1e-9) {
@@ -187,12 +207,11 @@ const submitIn = async () => {
   }
 }
 
-// === 送出出庫（選成品；實際扣綁定原料；平均單價可手動輸入） ===
+// === 送出出庫（選成品；實際扣原料與成本） ===
 const submitOut = async () => {
   const row = outRow.value
   if (!selectedDate3.value) { alert('❌ 請選擇日期'); return }
   if (!isRowCompleteOut(row)) { alert('❌ 出庫：品項/數量需填（數量>0）'); return }
-
   const bind = getBinding(row.item)
   if (!bind) { alert('❌ 此成品尚未綁定原料與用量，請先到「品項設定」綁定'); return }
   if (!checkOutStock()) return
@@ -202,45 +221,30 @@ const submitOut = async () => {
     const rawName    = bind.rawName
     const rawQty     = Number((qtyProduct * Number(bind.ratio)).toFixed(2))
     const unitRaw    = Number(getAvgPrice(rawName))
-    const lineTotal  = Number((unitRaw * rawQty).toFixed(2))
-
-    // ✅ 關鍵檢查：不得是 NaN / 無限
-    if (!Number.isFinite(rawQty) || rawQty <= 0) {
-      alert('❌ 原料扣量計算錯誤'); return
-    }
-    if (!Number.isFinite(lineTotal) || lineTotal < 0) {
-      alert('❌ 金額計算錯誤（平均單價可能為空或不是數字）'); return
-    }
+    const lineTotal  = Number((unitRaw * rawQty).toFixed(2)) // 以原料平均單價估算成本
 
     const payload = {
-      item: rawName, // 以原料扣庫
-      quantity: rawQty,
-      price: lineTotal,
+      item: rawName,                 // 以原料扣庫
+      quantity: rawQty,              // 原料扣量
+      price: lineTotal,              // 整筆金額 = 原料平均單價 × 原料扣量
       note: (row.note || '') + `（由成品「${row.item}」x ${qtyProduct} 轉扣）`,
       date: selectedDate3.value
     }
-
-    console.log('[submitOut] payload =', payload)
-
     await axios.post(`${API}/outrecords`, payload)
     alert('✅ 出庫成功（已從原料扣庫）')
     await fetchRecords3()
     clearOut()
   } catch (err) {
-    // 顯示後端回傳的詳細錯誤
-    const msg = err?.response?.data?.message || err?.message || '未知錯誤'
-    console.error('submitOut error:', err?.response?.data || err)
-    alert('❌ 發送失敗：' + msg)
+    alert('❌ 發送失敗：' + err.message)
   }
 }
 
-
-// === 入/出庫列表編修（維持原流程） ===
+// === 入/出庫列表編修 ===
 const startEditRecord  = (id) => { editingId.value = id }
 const startEditRecord2 = (id) => { editingId.value = id }
 
 const confirmEdit = async () => {
-  const rec = recordList.value.find(r => r._id === editingId.value)
+  const rec = recordList.value.find(r => r?._id === editingId.value)
   try {
     await axios.put(`${API}/records/${editingId.value}`, rec)
     editingId.value = null
@@ -250,9 +254,8 @@ const confirmEdit = async () => {
   }
 }
 const confirmEdit2 = async () => {
-  const rec = recordList2.value.find(r => r._id === editingId.value)
+  const rec = recordList2.value.find(r => r?._id === editingId.value)
   try {
-    // 出庫整筆金額維持不可於列表中手改（表單輸入單價後送出）
     await axios.put(`${API}/outrecords/${editingId.value}`, rec)
     editingId.value = null
     await fetchRecords2()
@@ -271,36 +274,44 @@ const deleteRecord2 = async (id) => {
   catch (err) { alert('❌ 刪除失敗：' + err.message) }
 }
 
-// === 品項設定（維持原本「兩張表」風格；原料不顯示售價；成品僅綁定原料） ===
+// === 品項設定（群組：原料 + 綁定成品） ===
 const itemEditingId = ref(null)
-const newRaw = ref({ name: '' })
-const newProduct = ref({ name: '', salePrice: '', bindRaw: '' })
+const newRaw = ref({ name: '', salePrice: '' })
+
+// 在每個原料群組底下新增成品的暫存表
+const newProductMap = ref({}) // { [rawName]: { name:'', salePrice:'', ratio:'' } }
+function np(rawName) {
+  if (!newProductMap.value[rawName]) newProductMap.value[rawName] = { name:'', salePrice:'', ratio:'' }
+  return newProductMap.value[rawName]
+}
 
 const addRawItem = async () => {
   if (!newRaw.value.name) { alert('請輸入原料名稱'); return }
   try {
     await axios.post(`${API}/items`, {
       name: newRaw.value.name.trim(),
+      salePrice: Number(newRaw.value.salePrice || 0),
       type: 'raw'
     })
-    newRaw.value = { name: '' }
+    newRaw.value = { name: '', salePrice: '' }
     await fetchItems()
   } catch (e) {
     alert('新增失敗：' + e.message)
   }
 }
-const addProductItem = async () => {
-  const p = newProduct.value
-  if (!p.name) { alert('請輸入成品名稱'); return }
-  if (!p.bindRaw) { alert('請選擇綁定原料'); return }
+const addProductUnder = async (rawName) => {
+  const form = np(rawName)
+  if (!form.name) { alert('請輸入成品名稱'); return }
+  if (!form.ratio || Number(form.ratio) <= 0) { alert('請輸入每份原料用量（>0）'); return }
   try {
     await axios.post(`${API}/items`, {
-      name: p.name.trim(),
-      salePrice: Number(p.salePrice || 0),
+      name: form.name.trim(),
+      salePrice: Number(form.salePrice || 0),
       type: 'product',
-      bindRaw: p.bindRaw
+      bindRaw: rawName,
+      ratio: Number(form.ratio)
     })
-    newProduct.value = { name: '', salePrice: '', bindRaw: '' }
+    newProductMap.value[rawName] = { name:'', salePrice:'', ratio:'' }
     await fetchItems()
   } catch (e) {
     alert('新增失敗：' + e.message)
@@ -309,10 +320,13 @@ const addProductItem = async () => {
 const startEditItem = (id) => { itemEditingId.value = id }
 const confirmEditItem = async (it) => {
   try {
-    const body = { name: it.name }
+    const body = {
+      name: it.name,
+      salePrice: Number(it.salePrice || 0)
+    }
     if (it.type === 'product') {
-      body.salePrice = Number(it.salePrice || 0)
-      body.bindRaw   = it.bindRaw || ''
+      body.bindRaw = it.bindRaw || ''
+      body.ratio   = Number(it.ratio || 0)
     }
     await axios.put(`${API}/items/${it._id}`, body)
     itemEditingId.value = null
@@ -331,11 +345,12 @@ const deleteItem = async (id) => {
   }
 }
 
-// === 報表（簡化：仍顯示營收，成本以 costOfProduct=0 佔位；可依你後續需求再調整） ===
+// === 報表（只顯示成品；成本用「綁定原料平均單價 × ratio × 份數」動態算） ===
 const fixedExpense = ref('')
 const extraExpense = ref('')
 const reportQty = ref({}) // { [productName]: qty }
 
+// 品項變動時，同步報表可填 key
 watch(items, () => {
   const map = { ...reportQty.value }
   for (const it of productItems.value) if (!(it.name in map)) map[it.name] = 0
@@ -343,9 +358,12 @@ watch(items, () => {
   reportQty.value = map
 }, { deep: true })
 
-function costOfProduct(_product) {
-  // 目前無「用量」設定，若日後需要可改為以出庫紀錄匯總或其他規則
-  return 0
+function costOfProduct(product) {
+  const bind = getBinding(product.name)
+  if (!bind) return 0
+  const qty = Number(reportQty.value[product.name] || 0)
+  const avgRaw = getAvgPrice(bind.rawName)
+  return Number((qty * bind.ratio * avgRaw).toFixed(2))
 }
 
 const revenueTotal = computed(() => {
@@ -366,6 +384,7 @@ const totalProductQty = computed(() =>
   productItems.value.reduce((s, it) => s + Number(reportQty.value[it.name] || 0), 0)
 )
 
+// 送出報表（規則：成本=0 ⇒ 份數總計必須 > 0）
 const submitReport = async () => {
   if (!selectedDate5.value) { alert('❌ 請先選擇報表日期'); return }
   if (Number(costTotal.value || 0) === 0 && Number(totalProductQty.value || 0) <= 0) {
@@ -394,7 +413,8 @@ async function fetchReportsList () {
   try {
     isReportsLoading.value = true
     const { data } = await axios.get(`${API}/reports`)
-    reportList.value = (data || []).sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+    const arr = Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : [])
+    reportList.value = (arr || []).sort((a, b) => (b?.date || '').localeCompare(a?.date || ''))
   } finally {
     isReportsLoading.value = false
   }
@@ -447,7 +467,7 @@ watch(currentPage4, async (p) => {
   </div>
 
   <div class="page-content mt-4">
-    <!-- 入庫（維持原樣） -->
+    <!-- 入庫 -->
     <div v-if="currentPage === 'one'">
       <div v-if="currentPage2 === 'one-1'">
         <div class="d-flex justify-content-center align-items-center">
@@ -566,7 +586,7 @@ watch(currentPage4, async (p) => {
 
     <!-- 庫存 -->
     <div v-else-if="currentPage === 'two'">
-      <!-- 庫存：單顆切換按鈕（維持原樣） -->
+      <!-- 庫存：單顆切換按鈕 -->
       <div class="d-flex justify-content-center align-items-center">
         <button
           v-if="currentPageStock === 'one-1'"
@@ -588,7 +608,7 @@ watch(currentPage4, async (p) => {
         </button>
       </div>
 
-      <!-- 庫存總覽（僅原料；維持原樣） -->
+      <!-- 庫存總覽（僅原料） -->
       <div v-if="currentPageStock === 'one-1'" class="form-wrapper">
         <h5 class="title">庫存總覽</h5>
         <div v-if="isLoading" style="font-size:14px;color:#888;">載入中...</div>
@@ -610,94 +630,93 @@ watch(currentPage4, async (p) => {
         </div>
       </div>
 
-      <!-- 品項設定（兩張表） -->
+      <!-- 品項設定：分群（原料 + 綁定的成品們） -->
       <div v-else-if="currentPageStock === 'two-2'" class="form-wrapper">
         <h5 class="title">品項設定</h5>
 
-        <!-- 原料（不顯示售價） -->
-        <h6 class="text-start mb-2">原料</h6>
-        <table class="table">
-          <thead><tr><th>品項名稱</th><th style="width:120px;"></th></tr></thead>
-          <tbody>
-            <tr v-for="it in rawItems" :key="it._id">
-              <td>
-                <template v-if="itemEditingId === it._id"><input v-model="it.name" /></template>
-                <template v-else>{{ it.name }}</template>
-              </td>
-              <td class="text-center">
-                <template v-if="itemEditingId === it._id">
-                  <button class="update-btn" @click="confirmEditItem(it)">存</button>
-                </template>
-                <template v-else>
-                  <button class="update-btn" @click="startEditItem(it._id)">改</button>
-                  <button class="delete-btn ms-2" @click="deleteItem(it._id)">刪</button>
-                </template>
-              </td>
-            </tr>
-            <tr>
-              <td><input placeholder="新原料名稱" v-model="newRaw.name" /></td>
-              <td class="text-center"><button class="update-btn" @click="addRawItem">新增</button></td>
-            </tr>
-          </tbody>
-        </table>
+        <!-- 新增原料 -->
+        <div class="mb-3 p-2 border rounded text-start">
+          <div class="fw-bold mb-2">新增原料</div>
+          <div class="d-flex gap-2">
+            <input placeholder="新原料名稱" v-model="newRaw.name" style="max-width:240px;" />
+            <input type="number" step="0.01" min="0" placeholder="售價(可留空)" v-model.number="newRaw.salePrice" style="max-width:160px;" />
+            <button class="update-btn" @click="addRawItem">新增原料</button>
+          </div>
+        </div>
 
-        <!-- 成品（可綁定原料；無用量欄） -->
-        <h6 class="text-start mb-2 mt-4">成品</h6>
-        <table class="table">
-          <thead>
-            <tr>
-              <th>成品名稱</th>
-              <th>售價</th>
-              <th>綁定原料</th>
-              <th style="width:120px;"></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="it in productItems" :key="it._id">
-              <td>
-                <template v-if="itemEditingId === it._id"><input v-model="it.name" /></template>
-                <template v-else>{{ it.name }}</template>
-              </td>
-              <td style="max-width:160px;">
-                <template v-if="itemEditingId === it._id"><input type="number" step="0.01" min="0" v-model.number="it.salePrice" /></template>
-                <template v-else>{{ Number(it.salePrice || 0).toFixed(2) }}</template>
-              </td>
-              <td style="max-width:200px;">
-                <template v-if="itemEditingId === it._id">
-                  <select v-model="it.bindRaw">
-                    <option value=""></option>
-                    <option v-for="r in inOptions" :key="r" :value="r">{{ r }}</option>
-                  </select>
+        <!-- 各原料群組 -->
+        <div v-for="g in groups" :key="g.raw._id" class="group">
+          <div class="group-head">
+            <div class="group-title">原料</div>
+            <div class="group-grid">
+              <div>
+                <span class="muted">品項名稱：</span>
+                <template v-if="itemEditingId === g.raw._id">
+                  <input v-model="g.raw.name" />
                 </template>
-                <template v-else>{{ it.bindRaw || '' }}</template>
-              </td>
-              <td class="text-center">
-                <template v-if="itemEditingId === it._id">
-                  <button class="update-btn" @click="confirmEditItem(it)">存</button>
+                <template v-else>{{ g.raw.name }}</template>
+              </div>
+              <div>
+                <span class="muted">售價：</span>
+                <template v-if="itemEditingId === g.raw._id">
+                  <input type="number" step="0.01" min="0" v-model.number="g.raw.salePrice" style="max-width:140px;" />
+                </template>
+                <template v-else>{{ Number(g.raw.salePrice || 0).toFixed(2) }}</template>
+              </div>
+              <div class="text-end">
+                <template v-if="itemEditingId === g.raw._id">
+                  <button class="update-btn" @click="confirmEditItem(g.raw)">存</button>
                 </template>
                 <template v-else>
-                  <button class="update-btn" @click="startEditItem(it._id)">改</button>
-                  <button class="delete-btn ms-2" @click="deleteItem(it._id)">刪</button>
+                  <button class="update-btn" @click="startEditItem(g.raw._id)">改</button>
+                  <button class="delete-btn ms-2" @click="deleteItem(g.raw._id)">刪</button>
                 </template>
-              </td>
-            </tr>
-            <tr>
-              <td><input placeholder="新成品名稱" v-model="newProduct.name" /></td>
-              <td><input type="number" step="0.01" min="0" placeholder="售價" v-model.number="newProduct.salePrice" /></td>
-              <td>
-                <select v-model="newProduct.bindRaw">
-                  <option value=""></option>
-                  <option v-for="r in inOptions" :key="r" :value="r">{{ r }}</option>
-                </select>
-              </td>
-              <td class="text-center"><button class="update-btn" @click="addProductItem">新增</button></td>
-            </tr>
-          </tbody>
-        </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="group-body">
+            <div class="group-title sub">成品（綁定原料：{{ g.raw.name }}）</div>
+            <table class="table">
+              <thead><tr><th>成品名稱</th><th>售價</th><th>每份原料用量</th><th style="width:120px;"></th></tr></thead>
+              <tbody>
+                <tr v-for="p in g.products" :key="p._id">
+                  <td>
+                    <template v-if="itemEditingId === p._id"><input v-model="p.name" /></template>
+                    <template v-else>{{ p.name }}</template>
+                  </td>
+                  <td style="max-width:160px;">
+                    <template v-if="itemEditingId === p._id"><input type="number" step="0.01" min="0" v-model.number="p.salePrice" /></template>
+                    <template v-else>{{ Number(p.salePrice || 0).toFixed(2) }}</template>
+                  </td>
+                  <td style="max-width:160px;">
+                    <template v-if="itemEditingId === p._id"><input type="number" step="0.01" min="0.01" v-model.number="p.ratio" /></template>
+                    <template v-else>{{ Number(p.ratio || 0).toFixed(2) }}</template>
+                  </td>
+                  <td class="text-center">
+                    <template v-if="itemEditingId === p._id">
+                      <button class="update-btn" @click="confirmEditItem(p)">存</button>
+                    </template>
+                    <template v-else>
+                      <button class="update-btn" @click="startEditItem(p._id)">改</button>
+                      <button class="delete-btn ms-2" @click="deleteItem(p._id)">刪</button>
+                    </template>
+                  </td>
+                </tr>
+                <tr>
+                  <td><input placeholder="新成品名稱" v-model="np(g.raw.name).name" /></td>
+                  <td><input type="number" step="0.01" min="0" placeholder="售價" v-model.number="np(g.raw.name).salePrice" /></td>
+                  <td><input type="number" step="0.01" min="0.01" placeholder="每份原料用量" v-model.number="np(g.raw.name).ratio" /></td>
+                  <td class="text-center"><button class="update-btn" @click="addProductUnder(g.raw.name)">新增</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- 出庫（維持原表格格式：品項 / 數量 / 平均單價 / 備註；平均單價可輸入） -->
+    <!-- 出庫（選成品；扣原料） -->
     <div v-if="currentPage === 'three'">
       <div v-if="currentPage3 === 'one-1'">
         <div class="d-flex justify-content-center align-items-center">
@@ -707,6 +726,10 @@ watch(currentPage4, async (p) => {
         <div class="form-wrapper">
           <h5 class="title">商品出庫</h5>
 
+          <div class="d-flex justify-content-center mt-2 mb-1" style="font-size:12px;color:#666;" v-if="selectedBinding">
+            <div>會扣原料：<b>{{ selectedBinding.rawName }}</b>，每份用量：<b>{{ Number(selectedBinding.ratio).toFixed(2) }}</b></div>
+          </div>
+
           <div class="d-flex justify-content-center mt-3">
             <div class="d-flex align-items-center gap-3 mb-3" style="width:100%;max-width:330px;">
               <div style="font-size:14px;white-space:nowrap;">日期&ensp;:</div>
@@ -715,7 +738,7 @@ watch(currentPage4, async (p) => {
           </div>
 
           <table>
-            <thead><tr><th></th><th>品項</th><th>數量</th><th>平均單價</th><th>備註</th></tr></thead>
+            <thead><tr><th></th><th>成品</th><th>份數</th><th>原料平均單價</th><th>備註</th></tr></thead>
             <tbody>
               <tr>
                 <td><div type="button" class="clear" @click="clearOut">空</div></td>
@@ -725,7 +748,12 @@ watch(currentPage4, async (p) => {
                   </select>
                 </td>
                 <td><input type="number" class="qty" v-model.number="outRow.quantity" min="0.01" step="0.01" /></td>
-                <td><input type="number" class="price" v-model.number="outRow.unitPrice" min="0" step="0.01" /></td>
+                <td>
+                  <div class="price-text">
+                    <template v-if="selectedBinding">{{ getAvgPrice(selectedBinding.rawName).toFixed(2) }}</template>
+                    <template v-else>—</template>
+                  </div>
+                </td>
                 <td><input class="note" v-model="outRow.note" /></td>
               </tr>
             </tbody>
@@ -761,7 +789,7 @@ watch(currentPage4, async (p) => {
           </div>
 
           <table>
-            <thead><tr><th></th><th>品項</th><th>數量</th><th>整筆價格</th><th>備註</th><th v-if="!editingId">日期</th></tr></thead>
+            <thead><tr><th></th><th>原料</th><th>扣量</th><th>整筆金額</th><th>備註</th><th v-if="!editingId">日期</th></tr></thead>
             <tbody>
               <tr v-for="record in recordList2" :key="record._id">
                 <td class="button">
@@ -788,8 +816,7 @@ watch(currentPage4, async (p) => {
                 </td>
 
                 <td class="price">
-                  <!-- 列表維持不可手改 -->
-                  <template v-if="editingId === record._id"><input type="number" v-model.number="record.price" min="0" step="0.01" disabled /></template>
+                  <template v-if="editingId === record._id"><input type="number" v-model.number="record.price" min="0" step="0.01" /></template>
                   <template v-else>{{ Number(record.price).toFixed(2) }}</template>
                 </td>
 
@@ -812,8 +839,9 @@ watch(currentPage4, async (p) => {
       </div>
     </div>
 
-    <!-- 報表（樣式維持） -->
+    <!-- 報表 -->
     <div v-if="currentPage === 'four'">
+      <!-- 報表紀錄（只顯示成品；成本依綁定原料即時計算） -->
       <div v-if="currentPage4 === 'one-1'">
         <div class="d-flex justify-content-center align-items-center">
           <button style="min-width:330px;" class="btn mb-3" :class="{ active: currentPage4 === 'two-2' }" @click="() => { currentPage4 = 'two-2'; fetchReportsList() }">報表總覽</button>
@@ -830,7 +858,7 @@ watch(currentPage4, async (p) => {
           </div>
 
           <table class="text-center align-middle">
-            <thead><tr><th>品項</th><th>份數 × 售價</th><th>營業收入</th><th>銷貨成本</th></tr></thead>
+            <thead><tr><th>成品</th><th>份數 × 售價</th><th>營業收入</th><th>銷貨成本（原料×用量）</th></tr></thead>
             <tbody>
               <tr v-for="it in productItems" :key="it._id">
                 <td>{{ it.name }}</td>
@@ -910,16 +938,16 @@ watch(currentPage4, async (p) => {
 input[type="date"] { padding:8px 24px; font-size:1rem; border:1px solid #ccc; border-radius:4px; width:50%; }
 .btn { background-color:#b2afaf; padding:10px; border-radius:4px; cursor:pointer; transition:background-color .2s; font-size:12px; width:20%; white-space:nowrap; }
 .btn:hover { background-color:#6c6d6e; color:#fff; }
-.form-wrapper { max-width:800px; margin:20px auto; padding:10px; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,.1); } /* 寬度還原 */
+.form-wrapper { max-width:980px; margin:20px auto; padding:10px; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,.1); }
 table { width:100%; border-collapse:collapse; margin-bottom:16px; }
-th, td { border:none; padding:4px; text-align:center; font-size:12px; } /* 還原 padding */
+th, td { border:none; padding:6px; text-align:center; font-size:12px; }
 input { width:100%; padding:4px; box-sizing:border-box; border:1px solid #ccc; border-radius:4px; }
 .delete-btn { border:none; font-size:8px; cursor:pointer; border-radius:15px; background:#8d0205; color:#fff; padding:6px; }
 .update-btn { border:none; font-size:8px; cursor:pointer; border-radius:15px; background:#1d35d0; color:#fff; padding:6px; }
 select { width:100%; border:1px solid #ccc; border-radius:4px; box-sizing:border-box; }
 td select, td input { min-height:30px; }
-.items{ min-width:80px; } /* 還原 */
-.qty, .price, .price-text, .note { min-width:60px; } /* 還原 */
+.items{ min-width:120px; }
+.qty, .price, .price-text, .note { min-width:80px; }
 .button{ max-width:20px; padding-left:0!important; padding-right:25px!important; }
 input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
 .title{ color:#f00; margin-bottom:1rem; }
@@ -934,4 +962,13 @@ input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner
 
 .report-table tbody tr { height:56px; }
 .report-table tbody td { vertical-align:middle; }
+
+/* 群組樣式 */
+.group { border:1px solid #e5e5e5; border-radius:8px; margin-bottom:16px; overflow:hidden; }
+.group-head { background:#fafafa; padding:10px 12px; }
+.group-body { padding:10px 12px; }
+.group-title { font-weight:700; margin-bottom:8px; }
+.group-title.sub { font-weight:600; color:#333; }
+.group-grid { display:grid; grid-template-columns: 1fr 1fr auto; gap:10px; align-items:center; }
+.muted { color:#666; }
 </style>
