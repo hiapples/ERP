@@ -21,22 +21,22 @@ const selectedDate4 = ref('')
 const selectedDate5 = ref(today)
 
 // 清單
-const recordList = ref([])   // 入庫
-const recordList2 = ref([])  // 出庫（此專案中會以「原料」名義扣出）
+const recordList = ref([])   // 入庫（原料）
+const recordList2 = ref([])  // 出庫（這裡會以原料名義扣）
 const isLoading = ref(false)
 
 // 品項（動態從 DB）
 // 原料：{ _id, name, salePrice, type:'raw' }
-// 成品：{ _id, name, salePrice, type:'product', bindRaw:'原料名稱', ratio: 每份原料用量(數字) }
+// 成品：{ _id, name, salePrice, type:'product', bindRaw:'原料名稱', ratio: 每份原料用量 }
 const items = ref([])
 const rawItems = computed(() => items.value.filter(i => i.type === 'raw'))
 const productItems = computed(() => items.value.filter(i => i.type === 'product'))
 
-// 入庫僅能選原料；出庫僅能選成品
+// 入庫只選原料；出庫只選成品
 const inOptions  = computed(() => rawItems.value.map(i => i.name))
 const outOptions = computed(() => productItems.value.map(i => i.name))
 
-// 群組：一個原料底下掛它的成品
+// 以「原料群組」方式呈現（原料 + 該原料底下的成品們）
 const groups = computed(() =>
   rawItems.value.map(r => ({
     raw: r,
@@ -45,12 +45,12 @@ const groups = computed(() =>
 )
 
 // 單筆輸入
-const inRow  = ref({ item: '', quantity: '', price: '', note: '' })
-const outRow = ref({ item: '', quantity: '', note: '' }) // item=成品名稱；會轉扣原料
+const inRow  = ref({ item: '', quantity: '', price: '', note: '' })  // 原料入庫
+const outRow = ref({ item: '', quantity: '', note: '' })             // 成品出庫（會轉扣原料）
 
 const editingId = ref(null)
 const selectedItem  = ref('') // 入庫查詢用（原料）
-const selectedItem2 = ref('') // 出庫查詢用（以原料為主，因為實際扣的是原料）
+const selectedItem2 = ref('') // 出庫查詢用（原料）
 
 // === 入/出庫共用 ===
 const isEmpty = (v) => v === '' || v === null || v === undefined
@@ -118,7 +118,7 @@ const itemSummary = computed(() => {
   const summary = []
   for (const item of names) {
     const inRecords  = recordList.value.filter(r => r.item === item)
-    const outRecords = recordList2.value.filter(r => r.item === item) // 出庫用原料名扣
+    const outRecords = recordList2.value.filter(r => r.item === item)
 
     const inQty      = inRecords.reduce((s, r) => s + Number(r.quantity), 0)
     const inSumPrice = inRecords.reduce((s, r) => s + Number(r.price), 0)
@@ -138,7 +138,7 @@ const getAvgPrice = (rawName) => {
   return f ? f.avgPrice : 0
 }
 
-// 取得成品的綁定資訊
+// 綁定工具
 function findProduct(name) { return productItems.value.find(p => p.name === name) || null }
 function getBinding(productName) {
   const p = findProduct(productName)
@@ -147,7 +147,7 @@ function getBinding(productName) {
 }
 const selectedBinding = computed(() => getBinding(outRow.value.item))
 
-// === 出庫時檢查庫存是否足夠（檢查綁定的原料） ===
+// === 出庫時檢查庫存（檢查綁定的原料是否足夠） ===
 function checkOutStock () {
   const row = outRow.value
   if (!row.item || !row.quantity) return true
@@ -184,7 +184,7 @@ const submitIn = async () => {
     const payload = {
       item: row.item,
       quantity: Number(row.quantity),
-      price: Number(Number(row.price).toFixed(2)), // 整筆金額
+      price: Number(Number(row.price).toFixed(2)),
       note: row.note || '',
       date: selectedDate.value
     }
@@ -264,11 +264,11 @@ const deleteRecord2 = async (id) => {
   catch (err) { alert('❌ 刪除失敗：' + err.message) }
 }
 
-// === 品項管理（群組：原料 + 綁定成品） ===
+// === 品項設定（群組：原料 + 綁定成品） ===
 const itemEditingId = ref(null)
 const newRaw = ref({ name: '', salePrice: '' })
 
-// 每個原料群組底下新增成品的暫存表
+// 在每個原料群組底下新增成品的暫存表
 const newProductMap = ref({}) // { [rawName]: { name:'', salePrice:'', ratio:'' } }
 function np(rawName) {
   if (!newProductMap.value[rawName]) newProductMap.value[rawName] = { name:'', salePrice:'', ratio:'' }
@@ -310,7 +310,6 @@ const addProductUnder = async (rawName) => {
 const startEditItem = (id) => { itemEditingId.value = id }
 const confirmEditItem = async (it) => {
   try {
-    // 原料：name/salePrice；成品：name/salePrice/bindRaw/ratio
     const body = {
       name: it.name,
       salePrice: Number(it.salePrice || 0)
@@ -341,6 +340,7 @@ const fixedExpense = ref('')
 const extraExpense = ref('')
 const reportQty = ref({}) // { [productName]: qty }
 
+// 品項變動時，同步報表可填 key
 watch(items, () => {
   const map = { ...reportQty.value }
   for (const it of productItems.value) if (!(it.name in map)) map[it.name] = 0
@@ -433,7 +433,7 @@ watch(
   async () => {
     if (currentPage.value === 'two' || currentPage.value === 'three') await fetchRecords3()
     else if (currentPage.value === 'four') {
-      // 報表頁改為純前端即時計算，因此不需要再打 /outrecords/total
+      // 報表頁用前端即時計算
     } else {
       await fetchRecords()
     }
@@ -575,7 +575,7 @@ watch(currentPage4, async (p) => {
 
     <!-- 庫存 -->
     <div v-else-if="currentPage === 'two'">
-      <!-- 庫存：單顆切換按鈕（與其他頁一致） -->
+      <!-- 庫存：單顆切換按鈕 -->
       <div class="d-flex justify-content-center align-items-center">
         <button
           v-if="currentPageStock === 'one-1'"
@@ -619,7 +619,7 @@ watch(currentPage4, async (p) => {
         </div>
       </div>
 
-      <!-- 品項設定：分群（原料 + 成品清單） -->
+      <!-- 品項設定：分群（原料 + 綁定的成品們） -->
       <div v-else-if="currentPageStock === 'two-2'" class="form-wrapper">
         <h5 class="title">品項設定</h5>
 
@@ -636,7 +636,6 @@ watch(currentPage4, async (p) => {
         <!-- 各原料群組 -->
         <div v-for="g in groups" :key="g.raw._id" class="group">
           <div class="group-head">
-            <!-- 原料資訊 -->
             <div class="group-title">原料</div>
             <div class="group-grid">
               <div>
@@ -665,7 +664,6 @@ watch(currentPage4, async (p) => {
             </div>
           </div>
 
-          <!-- 綁定的成品清單 -->
           <div class="group-body">
             <div class="group-title sub">成品（綁定原料：{{ g.raw.name }}）</div>
             <table class="table">
@@ -694,8 +692,6 @@ watch(currentPage4, async (p) => {
                     </template>
                   </td>
                 </tr>
-
-                <!-- 在此原料下新增成品 -->
                 <tr>
                   <td><input placeholder="新成品名稱" v-model="np(g.raw.name).name" /></td>
                   <td><input type="number" step="0.01" min="0" placeholder="售價" v-model.number="np(g.raw.name).salePrice" /></td>
