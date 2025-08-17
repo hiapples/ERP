@@ -1,9 +1,10 @@
+<!-- frontend/src/components/erp.vue -->
 <script setup>
 import { ref, onMounted, watch, computed } from 'vue'
 import axios from 'axios'
 
 // 若前後端同網域部署，用空字串；不同網域就填完整網址
-const API = '' // 例如 'https://erp-ahup.onrender.com'
+const API = '' // 例如 'https://your-backend.onrender.com'
 
 // 分頁
 const currentPage = ref('one')     // one: 入庫, two: 庫存(+品項設定), three: 出庫, four: 報表
@@ -28,16 +29,17 @@ const isLoading = ref(false)
 const items = ref([]) // [{_id,name,salePrice,type}]
 const rawItems = computed(() => items.value.filter(i => i.type === 'raw'))
 const productItems = computed(() => items.value.filter(i => i.type === 'product'))
-// 入庫/出庫下拉只允許選「原料」
-const itemOptions = computed(() => rawItems.value.map(i => i.name))
+// 入庫只選原料；出庫只選成品
+const inOptions  = computed(() => rawItems.value.map(i => i.name))
+const outOptions = computed(() => productItems.value.map(i => i.name))
 
 // 單筆輸入
 const inRow = ref({ item: '', quantity: '', price: '', note: '' })
 const outRow = ref({ item: '', quantity: '', note: '' })
 
 const editingId = ref(null)
-const selectedItem = ref('')
-const selectedItem2 = ref('')
+const selectedItem = ref('')   // 入庫查詢用
+const selectedItem2 = ref('')  // 出庫查詢用
 
 // === 入/出庫共用 ===
 const isEmpty = (v) => v === '' || v === null || v === undefined
@@ -45,8 +47,7 @@ const isRowCompleteIn = (row) =>
   !!row.item && !isEmpty(row.quantity) && Number(row.quantity) > 0 &&
   !isEmpty(row.price) && Number(row.price) >= 0
 const isRowCompleteOut = (row) =>
-  !!row.item && !isEmpty(row.quantity) && Number(row.quantity) > 0 &&
-  getAvgPrice(row.item) > 0
+  !!row.item && !isEmpty(row.quantity) && Number(row.quantity) > 0
 
 function clearIn () { inRow.value = { item: '', quantity: '', price: '', note: '' } }
 function clearOut () { outRow.value = { item: '', quantity: '', note: '' } }
@@ -100,13 +101,13 @@ const fetchRecords3 = async () => {
   }
 }
 
-// === 平均成本(以整筆金額加權) & 庫存彙總 ===
+// === 平均成本(以整筆金額加權) & 庫存彙總（僅原料） ===
 const itemSummary = computed(() => {
-  const names = itemOptions.value // 只用「原料」來算庫存
+  const names = inOptions.value
   const summary = []
   for (const item of names) {
     const inRecords = recordList.value.filter(r => r.item === item)
-    const outRecords = recordList2.value.filter(r => r.item === item)
+    const outRecords = recordList2.value.filter(r => r.item === item) // 目前出庫不會是原料，但保留
 
     const inQty = inRecords.reduce((s, r) => s + Number(r.quantity), 0)
     const inSumPrice = inRecords.reduce((s, r) => s + Number(r.price), 0)
@@ -128,20 +129,10 @@ const getAvgPrice = (item) => {
   return f ? f.avgPrice : 0
 }
 
-// === 出庫時檢查庫存是否足夠 ===
+// === 出庫時檢查庫存（現階段出庫僅成品，直接通過；保留原料檢查以防未來擴充） ===
 function checkOutStock () {
   const row = outRow.value
   if (!row.item || !row.quantity) return true
-  const outQty = Number(row.quantity)
-
-  const inQty = recordList.value.filter(r => r.item === row.item).reduce((s, r) => s + Number(r.quantity), 0)
-  const currentOutQty = recordList2.value.filter(r => r.item === row.item).reduce((s, r) => s + Number(r.quantity), 0)
-
-  if (outQty + currentOutQty > inQty) {
-    const left = (inQty - currentOutQty).toFixed(2)
-    alert(`【${row.item}】庫存不足，無法出庫 ${outQty}，目前庫存僅剩 ${left}`)
-    return false
-  }
   return true
 }
 
@@ -168,18 +159,16 @@ const submitIn = async () => {
   }
 }
 
-// === 送出出庫（以平均單價×數量，存整筆金額，不讓使用者改價） ===
+// === 送出出庫（成品：整筆金額=0） ===
 const submitOut = async () => {
   const row = outRow.value
   if (!selectedDate3.value) { alert('❌ 請選擇日期'); return }
-  if (!isRowCompleteOut(row)) { alert('❌ 出庫：品項/數量需填（數量>0，平均單價>0）'); return }
+  if (!isRowCompleteOut(row)) { alert('❌ 出庫：品項/數量需填（數量>0）'); return }
   if (!checkOutStock()) return
 
   try {
     const qty = Number(row.quantity)
-    const unit = Number(getAvgPrice(row.item))
-    const lineTotal = Number((unit * qty).toFixed(2))
-    const payload = { item: row.item, quantity: qty, price: lineTotal, note: row.note || '', date: selectedDate3.value }
+    const payload = { item: row.item, quantity: qty, price: 0, note: row.note || '', date: selectedDate3.value }
     await axios.post(`${API}/outrecords`, payload)
     alert('✅ 出庫成功')
     await fetchRecords3()
@@ -206,6 +195,7 @@ const confirmEdit = async () => {
 const confirmEdit2 = async () => {
   const rec = recordList2.value.find(r => r._id === editingId.value)
   try {
+    // 伺服器會把 price 固定為 0
     await axios.put(`${API}/outrecords/${editingId.value}`, rec)
     editingId.value = null
     await fetchRecords2()
@@ -252,7 +242,7 @@ const addProductItem = async () => {
 const startEditItem = (id) => { itemEditingId.value = id }
 const confirmEditItem = async (it) => {
   try {
-    await axios.put(`${API}/items/${it._id}`, { name: it.name, salePrice: Number(it.salePrice || 0) }) // 不改 type
+    await axios.put(`${API}/items/${it._id}`, { name: it.name, salePrice: Number(it.salePrice || 0) })
     itemEditingId.value = null
     await fetchItems()
   } catch (e) {
@@ -270,7 +260,7 @@ const deleteItem = async (id) => {
 }
 
 // === 報表（只顯示成品） ===
-const reportCostsByItem = ref({}) // 當日每個品項的「銷貨成本(整筆)」—注意：這是依「出庫紀錄的品項」彙總
+const reportCostsByItem = ref({}) // 當日每個品項的「銷貨成本(整筆)」
 const fixedExpense = ref('')
 const extraExpense = ref('')
 const reportQty = ref({}) // { [productName]: qty }
@@ -336,7 +326,6 @@ const revenueTotal = computed(() => {
   return sum
 })
 const costTotal = computed(() => {
-  // 成本仍以出庫匯總為準（通常是原料成本總和）
   return Object.values(reportCostsByItem.value).reduce((s, v) => s + Number(v || 0), 0)
 })
 const netProfit = computed(() =>
@@ -349,7 +338,6 @@ const totalProductQty = computed(() =>
 // 送出報表（規則：成本總計=0 ⇒ 份數總計必須 > 0）
 const submitReport = async () => {
   if (!selectedDate5.value) { alert('❌ 請先選擇報表日期'); return }
-
   if (Number(costTotal.value || 0) === 0 && Number(totalProductQty.value || 0) <= 0) {
     alert('❌ 銷貨成本為 0，份數必須大於 0 才能送出')
     return
@@ -455,7 +443,7 @@ watch(currentPage4, async (p) => {
                 <td><div class="clear" @click="clearIn" type="button">空</div></td>
                 <td class="items">
                   <select v-model="inRow.item">
-                    <option v-for="option in itemOptions" :key="option" :value="option">{{ option }}</option>
+                    <option v-for="option in inOptions" :key="option" :value="option">{{ option }}</option>
                   </select>
                 </td>
                 <td><input type="number" class="qty"   v-model.number="inRow.quantity" min="0.01" step="0.01" /></td>
@@ -491,7 +479,7 @@ watch(currentPage4, async (p) => {
               <div style="font-size:14px;white-space:nowrap;">品項&ensp;:</div>
               <select v-model="selectedItem" style="min-height:42px;font-size:14px;flex:1;">
                 <option value=""></option>
-                <option v-for="option in itemOptions" :key="option" :value="option">{{ option }}</option>
+                <option v-for="option in inOptions" :key="option" :value="option">{{ option }}</option>
               </select>
             </div>
           </div>
@@ -512,7 +500,7 @@ watch(currentPage4, async (p) => {
                 <td class="items">
                   <template v-if="editingId === record._id">
                     <select v-model="record.item">
-                      <option v-for="option in itemOptions" :key="option" :value="option">{{ option }}</option>
+                      <option v-for="option in inOptions" :key="option" :value="option">{{ option }}</option>
                     </select>
                   </template>
                   <template v-else>{{ record.item }}</template>
@@ -551,7 +539,7 @@ watch(currentPage4, async (p) => {
 
     <!-- 庫存 -->
     <div v-else-if="currentPage === 'two'">
-      <!-- 庫存：單顆切換按鈕（跟其他頁一致） -->
+      <!-- 庫存：單顆切換按鈕（與其他頁一致） -->
       <div class="d-flex justify-content-center align-items-center">
         <button
           v-if="currentPageStock === 'one-1'"
@@ -689,11 +677,11 @@ watch(currentPage4, async (p) => {
                 <td><div type="button" class="clear" @click="clearOut">空</div></td>
                 <td class="items">
                   <select v-model="outRow.item">
-                    <option v-for="option in itemOptions" :key="option" :value="option">{{ option }}</option>
+                    <option v-for="option in outOptions" :key="option" :value="option">{{ option }}</option>
                   </select>
                 </td>
                 <td><input type="number" class="qty" v-model.number="outRow.quantity" min="0.01" step="0.01" /></td>
-                <td><div class="price-text">{{ getAvgPrice(outRow.item).toFixed(2) }}</div></td>
+                <td><div class="price-text">0.00</div></td>
                 <td><input class="note" v-model="outRow.note" /></td>
               </tr>
             </tbody>
@@ -711,7 +699,7 @@ watch(currentPage4, async (p) => {
         <div class="form-wrapper">
           <h5 class="title">出庫總覽查詢</h5>
 
-        <div class="d-flex justify-content-center mt-3">
+          <div class="d-flex justify-content-center mt-3">
             <div class="d-flex align-items-center gap-3" style="width:100%;max-width:330px;">
               <div style="font-size:14px;white-space:nowrap;">日期&ensp;:</div>
               <input type="date" v-model="selectedDate4" class="form-control" style="min-height:42px;flex:1;" />
@@ -723,7 +711,7 @@ watch(currentPage4, async (p) => {
               <div style="font-size:14px;white-space:nowrap;">品項&ensp;:</div>
               <select v-model="selectedItem2" style="min-height:42px;font-size:14px;flex:1;">
                 <option value=""></option>
-                <option v-for="option in itemOptions" :key="option" :value="option">{{ option }}</option>
+                <option v-for="option in outOptions" :key="option" :value="option">{{ option }}</option>
               </select>
             </div>
           </div>
@@ -744,7 +732,7 @@ watch(currentPage4, async (p) => {
                 <td class="items">
                   <template v-if="editingId === record._id">
                     <select v-model="record.item">
-                      <option v-for="option in itemOptions" :key="option" :value="option">{{ option }}</option>
+                      <option v-for="option in outOptions" :key="option" :value="option">{{ option }}</option>
                     </select>
                   </template>
                   <template v-else>{{ record.item }}</template>
@@ -756,7 +744,6 @@ watch(currentPage4, async (p) => {
                 </td>
 
                 <td class="price">
-                  <!-- 價格不允許手動輸入 -->
                   <template v-if="editingId === record._id"><input type="number" v-model.number="record.price" min="0" step="0.01" disabled /></template>
                   <template v-else>{{ Number(record.price).toFixed(2) }}</template>
                 </td>
@@ -808,7 +795,6 @@ watch(currentPage4, async (p) => {
                   <span>× {{ Number(it.salePrice || 0).toFixed(0) }}</span>
                 </td>
                 <td>{{ ((Number(reportQty[it.name] || 0)) * Number(it.salePrice || 0)).toFixed(0) }}</td>
-                <!-- 成本以總計為主；此處顯示對應鍵名存在才顯示 -->
                 <td>{{ reportCostsByItem[it.name] === undefined ? '' : Number(reportCostsByItem[it.name]).toFixed(2) }}</td>
               </tr>
 
