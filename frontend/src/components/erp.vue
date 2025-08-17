@@ -191,33 +191,49 @@ const submitIn = async () => {
 const submitOut = async () => {
   const row = outRow.value
   if (!selectedDate3.value) { alert('❌ 請選擇日期'); return }
-  if (!isRowCompleteOut(row)) { alert('❌ 出庫：品項/數量/平均單價需填（數量>0，單價≥0）'); return }
+  if (!isRowCompleteOut(row)) { alert('❌ 出庫：品項/數量需填（數量>0）'); return }
+
+  const bind = getBinding(row.item)
+  if (!bind) { alert('❌ 此成品尚未綁定原料與用量，請先到「品項設定」綁定'); return }
   if (!checkOutStock()) return
 
   try {
     const qtyProduct = Number(row.quantity)
-    const rawName    = getBindRaw(row.item)
-    if (!rawName) { alert('❌ 此成品尚未綁定原料'); return }
+    const rawName    = bind.rawName
+    const rawQty     = Number((qtyProduct * Number(bind.ratio)).toFixed(2))
+    const unitRaw    = Number(getAvgPrice(rawName))
+    const lineTotal  = Number((unitRaw * rawQty).toFixed(2))
 
-    const rawQty    = Number(qtyProduct.toFixed(2))         // 1:1 扣量
-    const unitRaw   = Number(row.unitPrice)                 // 使用者輸入的「平均單價」
-    const lineTotal = Number((unitRaw * rawQty).toFixed(2)) // 整筆金額
+    // ✅ 關鍵檢查：不得是 NaN / 無限
+    if (!Number.isFinite(rawQty) || rawQty <= 0) {
+      alert('❌ 原料扣量計算錯誤'); return
+    }
+    if (!Number.isFinite(lineTotal) || lineTotal < 0) {
+      alert('❌ 金額計算錯誤（平均單價可能為空或不是數字）'); return
+    }
 
     const payload = {
-      item: rawName,                 // 以原料扣庫
-      quantity: rawQty,              // 原料扣量
-      price: lineTotal,              // 整筆金額 = 手動平均單價 × 扣量
+      item: rawName, // 以原料扣庫
+      quantity: rawQty,
+      price: lineTotal,
       note: (row.note || '') + `（由成品「${row.item}」x ${qtyProduct} 轉扣）`,
       date: selectedDate3.value
     }
+
+    console.log('[submitOut] payload =', payload)
+
     await axios.post(`${API}/outrecords`, payload)
     alert('✅ 出庫成功（已從原料扣庫）')
     await fetchRecords3()
     clearOut()
   } catch (err) {
-    alert('❌ 發送失敗：' + err.message)
+    // 顯示後端回傳的詳細錯誤
+    const msg = err?.response?.data?.message || err?.message || '未知錯誤'
+    console.error('submitOut error:', err?.response?.data || err)
+    alert('❌ 發送失敗：' + msg)
   }
 }
+
 
 // === 入/出庫列表編修（維持原流程） ===
 const startEditRecord  = (id) => { editingId.value = id }
