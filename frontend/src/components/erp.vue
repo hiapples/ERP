@@ -437,7 +437,7 @@ watch(currentPage4, async (p) => {
           </div>
 
           <table>
-            <thead><tr><th></th><th>品項</th><th>數量</th><th>整筆價格</th><th>備註</th></tr></thead>
+            <thead><tr><th></th><th>品項</th><th>數量(g)</th><th>整筆價格</th><th>備註</th></tr></thead>
             <tbody>
               <tr>
                 <td><div class="clear" @click="clearIn" type="button">空</div></td>
@@ -568,7 +568,7 @@ watch(currentPage4, async (p) => {
         <div v-else>
           <div v-if="itemSummary.length > 0" style="font-size:14px;">
             <table class="table">
-              <thead><tr><th>品項</th><th>數量</th><th>平均單價</th><th>總價</th></tr></thead>
+              <thead><tr><th>品項</th><th>數量(g)</th><th>平均單價</th><th>總價</th></tr></thead>
               <tbody>
                 <tr v-for="(r, idx) in itemSummary" :key="idx">
                   <td>{{ r.item }}</td>
@@ -671,7 +671,7 @@ watch(currentPage4, async (p) => {
           </div>
 
           <table>
-            <thead><tr><th></th><th>品項</th><th>數量</th><th>平均單價</th><th>備註</th></tr></thead>
+            <thead><tr><th></th><th>品項</th><th>數量(g)</th><th>平均單價</th><th>備註</th></tr></thead>
             <tbody>
               <tr>
                 <td><div type="button" class="clear" @click="clearOut">空</div></td>
