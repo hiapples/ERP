@@ -54,18 +54,18 @@ router.put('/:id', async (req, res) => {
       if (found.type !== 'product') return res.status(400).json({ error: '出庫僅能是成品' })
     }
 
-    // 改後（允許更新整筆金額）
-    const updated = await OutRecord.findByIdAndUpdate(
-      id,
-      {
-        ...(item ? { item } : {}),
-        ...(quantity !== undefined ? { quantity: Number(quantity) } : {}),
-        ...(price !== undefined ? { price: Number(price || 0) } : {}),
-        ...(note !== undefined ? { note } : {}),
-        ...(date ? { date } : {})
-      },
-      { new: true }
-    )
+  // 改後（允許更新整筆金額）
+  const updated = await OutRecord.findByIdAndUpdate(
+    id,
+    {
+      ...(item ? { item } : {}),
+      ...(quantity !== undefined ? { quantity: Number(quantity) } : {}),
+      ...(price !== undefined ? { price: Number(price || 0) } : {}),
+      ...(note !== undefined ? { note } : {}),
+      ...(date ? { date } : {})
+    },
+    { new: true }
+  )
 
     if (!updated) return res.status(404).json({ error: '找不到資料' })
     res.json(updated)
