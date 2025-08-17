@@ -449,7 +449,7 @@ watch(currentPage4, async (p) => {
           </div>
 
           <table>
-            <thead><tr><th></th><th>品項（僅原料）</th><th>數量</th><th>整筆價格</th><th>備註</th></tr></thead>
+            <thead><tr><th></th><th>品項</th><th>數量</th><th>整筆價格</th><th>備註</th></tr></thead>
             <tbody>
               <tr>
                 <td><div class="clear" @click="clearIn" type="button">空</div></td>
@@ -575,7 +575,7 @@ watch(currentPage4, async (p) => {
 
       <!-- 庫存總覽（僅原料） -->
       <div v-if="currentPageStock === 'one-1'" class="form-wrapper">
-        <h5 class="title">庫存總覽（原料）</h5>
+        <h5 class="title">庫存總覽</h5>
         <div v-if="isLoading" style="font-size:14px;color:#888;">載入中...</div>
         <div v-else>
           <div v-if="itemSummary.length > 0" style="font-size:14px;">
@@ -683,7 +683,7 @@ watch(currentPage4, async (p) => {
           </div>
 
           <table>
-            <thead><tr><th></th><th>品項（僅原料）</th><th>數量</th><th>平均單價</th><th>備註</th></tr></thead>
+            <thead><tr><th></th><th>品項</th><th>數量</th><th>平均單價</th><th>備註</th></tr></thead>
             <tbody>
               <tr>
                 <td><div type="button" class="clear" @click="clearOut">空</div></td>
@@ -799,7 +799,7 @@ watch(currentPage4, async (p) => {
           </div>
 
           <table class="text-center align-middle">
-            <thead><tr><th>品項（成品）</th><th>份數 × 售價</th><th>營業收入</th><th>銷貨成本</th></tr></thead>
+            <thead><tr><th>品項</th><th>份數 × 售價</th><th>營業收入</th><th>銷貨成本</th></tr></thead>
             <tbody>
               <tr v-for="it in productItems" :key="it._id">
                 <td>{{ it.name }}</td>
