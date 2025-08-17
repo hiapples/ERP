@@ -1,62 +1,56 @@
-// backend/routes/items.js
-import express from 'express'
-import Item from '../models/item.js'
+// routes/items.js
+const express = require('express');
+const router = express.Router();
+const Item = require('../models/item');
 
-const router = express.Router()
+// 取得全部品項
+router.get('/items', async (req, res) => {
+  const list = await Item.find().lean();
+  res.json(list);
+});
 
-// 全部
-router.get('/', async (_req, res) => {
-  const items = await Item.find().sort({ type: 1, name: 1 })
-  res.json(items)
-})
+// 新增品項
+router.post('/items', async (req, res) => {
+  const { name, salePrice = 0, type, bindRaw = '' } = req.body;
+  if (!name || !type) return res.status(400).json({ message: 'name & type required' });
 
-// 新增
-router.post('/', async (req, res) => {
-  try {
-    let { name, salePrice = 0, type = 'raw' } = req.body
-    if (!name || !String(name).trim()) return res.status(400).json({ error: '缺少名稱' })
-    name = String(name).trim()
-    if (!['raw', 'product'].includes(type)) type = 'raw'
-    salePrice = Number(salePrice || 0)
-
-    const exists = await Item.findOne({ name })
-    if (exists) return res.status(409).json({ error: '名稱已存在' })
-
-    const it = await Item.create({ name, salePrice, type })
-    res.json(it)
-  } catch (e) {
-    res.status(500).json({ error: e.message || '新增失敗' })
+  const payload = { name: name.trim(), type };
+  if (type === 'product') {
+    payload.salePrice = Number(salePrice || 0);
+    payload.bindRaw = bindRaw || '';
   }
-})
+  // 原料不需要售價與綁定
+  const doc = await Item.create(payload);
+  res.json(doc);
+});
 
-// 更新
-router.put('/:id', async (req, res) => {
-  try {
-    const { id } = req.params
-    const { name, salePrice } = req.body
-    const update = {}
-    if (typeof name === 'string') update.name = name.trim()
-    if (salePrice !== undefined) update.salePrice = Number(salePrice || 0)
+// 更新品項
+router.put('/items/:id', async (req, res) => {
+  const { id } = req.params;
+  const { name, salePrice, bindRaw } = req.body;
 
-    // 不允許改 type（避免亂掉）
-    const it = await Item.findByIdAndUpdate(id, update, { new: true })
-    if (!it) return res.status(404).json({ error: '找不到品項' })
-    res.json(it)
-  } catch (e) {
-    res.status(500).json({ error: e.message || '更新失敗' })
+  const doc = await Item.findById(id);
+  if (!doc) return res.status(404).json({ message: 'Not found' });
+
+  if (name !== undefined) doc.name = name;
+  if (doc.type === 'product') {
+    if (salePrice !== undefined) doc.salePrice = Number(salePrice || 0);
+    if (bindRaw !== undefined) doc.bindRaw = bindRaw || '';
+  } else {
+    // 保險：原料沒有綁定
+    doc.bindRaw = '';
+    doc.salePrice = 0;
   }
-})
 
-// 刪除
-router.delete('/:id', async (req, res) => {
-  try {
-    const { id } = req.params
-    const result = await Item.findByIdAndDelete(id)
-    if (!result) return res.status(404).json({ error: '找不到品項' })
-    res.json({ ok: true })
-  } catch (e) {
-    res.status(500).json({ error: e.message || '刪除失敗' })
-  }
-})
+  await doc.save();
+  res.json(doc);
+});
 
-export default router
+// 刪除品項
+router.delete('/items/:id', async (req, res) => {
+  const { id } = req.params;
+  await Item.findByIdAndDelete(id);
+  res.json({ ok: true });
+});
+
+module.exports = router;
