@@ -35,7 +35,7 @@ const outOptions = computed(() => productItems.value.map(i => i.name))
 
 // 單筆輸入
 const inRow = ref({ item: '', quantity: '', price: '', note: '' })
-const outRow = ref({ item: '', quantity: '', note: '' })
+const outRow = ref({ item: '', quantity: '', unitPrice: '', note: '' })
 
 const editingId = ref(null)
 const selectedItem = ref('')   // 入庫查詢用
@@ -46,8 +46,11 @@ const isEmpty = (v) => v === '' || v === null || v === undefined
 const isRowCompleteIn = (row) =>
   !!row.item && !isEmpty(row.quantity) && Number(row.quantity) > 0 &&
   !isEmpty(row.price) && Number(row.price) >= 0
+// 改後：平均單價必須可填（>= 0）
 const isRowCompleteOut = (row) =>
-  !!row.item && !isEmpty(row.quantity) && Number(row.quantity) > 0
+  !!row.item &&
+  !isEmpty(row.quantity) && Number(row.quantity) > 0 &&
+  !isEmpty(row.unitPrice) && Number(row.unitPrice) >= 0
 
 function clearIn () { inRow.value = { item: '', quantity: '', price: '', note: '' } }
 function clearOut () { outRow.value = { item: '', quantity: '', note: '' } }
@@ -163,12 +166,14 @@ const submitIn = async () => {
 const submitOut = async () => {
   const row = outRow.value
   if (!selectedDate3.value) { alert('❌ 請選擇日期'); return }
-  if (!isRowCompleteOut(row)) { alert('❌ 出庫：品項/數量需填（數量>0）'); return }
+  if (!isRowCompleteOut(row)) { alert('❌ 出庫：品項/數量/平均單價需填（數量>0，單價≥0）'); return }
   if (!checkOutStock()) return
 
   try {
-    const qty = Number(row.quantity)
-    const payload = { item: row.item, quantity: qty, price: 0, note: row.note || '', date: selectedDate3.value }
+    const qty  = Number(row.quantity)
+    const unit = Number(row.unitPrice)
+    const lineTotal = Number((unit * qty).toFixed(2)) // 整筆金額
+    const payload = { item: row.item, quantity: qty, price: lineTotal, note: row.note || '', date: selectedDate3.value }
     await axios.post(`${API}/outrecords`, payload)
     alert('✅ 出庫成功')
     await fetchRecords3()
@@ -681,7 +686,8 @@ watch(currentPage4, async (p) => {
                   </select>
                 </td>
                 <td><input type="number" class="qty" v-model.number="outRow.quantity" min="0.01" step="0.01" /></td>
-                <td><div class="price-text">0.00</div></td>
+                <!-- 改後（可手動輸入平均單價） -->
+                <td><input type="number" class="price" v-model.number="outRow.unitPrice" min="0" step="0.01" /></td>
                 <td><input class="note" v-model="outRow.note" /></td>
               </tr>
             </tbody>

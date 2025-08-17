@@ -18,7 +18,7 @@ router.get('/', async (req, res) => {
 // 新增（限制只能出庫成品；整筆金額強制 0）
 router.post('/', async (req, res) => {
   try {
-    const { item, quantity, note = '', date } = req.body
+    const { item, quantity, price, note = '', date } = req.body
     if (!item || !date) return res.status(400).json({ error: '缺少 item 或 date' })
 
     const found = await Item.findOne({ name: item })
@@ -28,11 +28,12 @@ router.post('/', async (req, res) => {
     const payload = {
       item,
       quantity: Number(quantity || 0),
-      price: 0, // 本版規格：成品出庫不記成本金額
+      price: Number(price || 0),   // ← 接受前端送來的「整筆金額」
       note,
       date
     }
     if (payload.quantity <= 0) return res.status(400).json({ error: '數量必須 > 0' })
+    if (payload.price < 0) return res.status(400).json({ error: '金額不可為負數' })
 
     const created = await OutRecord.create(payload)
     res.json(created)
@@ -53,17 +54,19 @@ router.put('/:id', async (req, res) => {
       if (found.type !== 'product') return res.status(400).json({ error: '出庫僅能是成品' })
     }
 
+    // 改後（允許更新整筆金額）
     const updated = await OutRecord.findByIdAndUpdate(
       id,
       {
         ...(item ? { item } : {}),
         ...(quantity !== undefined ? { quantity: Number(quantity) } : {}),
+        ...(price !== undefined ? { price: Number(price || 0) } : {}),
         ...(note !== undefined ? { note } : {}),
-        ...(date ? { date } : {}),
-        price: 0
+        ...(date ? { date } : {})
       },
       { new: true }
     )
+
     if (!updated) return res.status(404).json({ error: '找不到資料' })
     res.json(updated)
   } catch (e) {
