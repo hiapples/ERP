@@ -1,3 +1,4 @@
+// backend/server.js
 import express from 'express'
 import mongoose from 'mongoose'
 import cors from 'cors'
@@ -16,14 +17,15 @@ const app = express()
 app.use(cors())
 app.use(express.json())
 
-// --- API ---
 app.get('/health', (_req, res) => res.json({ ok: true }))
-app.use('/records', InRoutes)
-app.use('/outrecords', OutRoutes)
-app.use('/reports', ReportRoutes)
-app.use('/items', ItemRoutes)
 
-// --- 靜態檔案 (前端 dist) ---
+// 分開路由
+app.use('/records', InRoutes)          // 入庫
+app.use('/outrecords', OutRoutes)      // 出庫
+app.use('/reports', ReportRoutes)      // 報表
+app.use('/items', ItemRoutes)          // 品項
+
+// ---- 靜態檔（前端打包後） ----
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const clientDist = path.resolve(__dirname, '../frontend/dist')

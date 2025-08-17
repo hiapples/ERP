@@ -1,95 +1,99 @@
+// backend/routes/out.js
 import express from 'express'
 import OutRecord from '../models/out.js'
 import Item from '../models/item.js'
 
 const router = express.Router()
 
+// 查詢
 router.get('/', async (req, res) => {
   const { date, item } = req.query
-  const cond = {}
-  if (date) cond.date = date
-  if (item) cond.item = item
-  const list = await OutRecord.find(cond).sort({ createdAt: -1 })
+  const q = {}
+  if (date) q.date = date
+  if (item) q.item = item
+  const list = await OutRecord.find(q).sort({ createdAt: -1 })
   res.json(list)
 })
 
+// 新增（限制只能出庫成品；整筆金額強制 0）
 router.post('/', async (req, res) => {
-  const body = req.body
-  const toSave = Array.isArray(body) ? body : [body]
-  const docs = toSave.map(r => ({
-    item: r.item,
-    quantity: Number(r.quantity),
-    price: Number(Number(r.price).toFixed(2)), // 整筆金額
-    note: r.note || '',
-    date: r.date
-  }))
-  const ret = await OutRecord.insertMany(docs)
-  res.json({ inserted: ret.length, ids: ret.map(d => d._id) })
+  try {
+    const { item, quantity, note = '', date } = req.body
+    if (!item || !date) return res.status(400).json({ error: '缺少 item 或 date' })
+
+    const found = await Item.findOne({ name: item })
+    if (!found) return res.status(400).json({ error: '品項不存在' })
+    if (found.type !== 'product') return res.status(400).json({ error: '只能出庫「成品」' })
+
+    const payload = {
+      item,
+      quantity: Number(quantity || 0),
+      price: 0, // 本版規格：成品出庫不記成本金額
+      note,
+      date
+    }
+    if (payload.quantity <= 0) return res.status(400).json({ error: '數量必須 > 0' })
+
+    const created = await OutRecord.create(payload)
+    res.json(created)
+  } catch (e) {
+    res.status(500).json({ error: e.message || '新增出庫失敗' })
+  }
 })
 
+// 更新（不允許把成品改成原料；金額仍固定為 0）
 router.put('/:id', async (req, res) => {
-  const { id } = req.params
-  const r = req.body || {}
-  const doc = await OutRecord.findByIdAndUpdate(
-    id,
-    {
-      $set: {
-        item: r.item,
-        quantity: Number(r.quantity),
-        price: Number(Number(r.price).toFixed(2)),
-        note: r.note || '',
-        date: r.date
-      }
-    },
-    { new: true }
-  )
-  res.json(doc)
+  try {
+    const { id } = req.params
+    const { item, quantity, note, date } = req.body
+
+    if (item) {
+      const found = await Item.findOne({ name: item })
+      if (!found) return res.status(400).json({ error: '品項不存在' })
+      if (found.type !== 'product') return res.status(400).json({ error: '出庫僅能是成品' })
+    }
+
+    const updated = await OutRecord.findByIdAndUpdate(
+      id,
+      {
+        ...(item ? { item } : {}),
+        ...(quantity !== undefined ? { quantity: Number(quantity) } : {}),
+        ...(note !== undefined ? { note } : {}),
+        ...(date ? { date } : {}),
+        price: 0
+      },
+      { new: true }
+    )
+    if (!updated) return res.status(404).json({ error: '找不到資料' })
+    res.json(updated)
+  } catch (e) {
+    res.status(500).json({ error: e.message || '更新失敗' })
+  }
 })
 
+// 刪除
 router.delete('/:id', async (req, res) => {
-  const { id } = req.params
-  await OutRecord.findByIdAndDelete(id)
-  res.json({ ok: true })
+  try {
+    const { id } = req.params
+    const r = await OutRecord.findByIdAndDelete(id)
+    if (!r) return res.status(404).json({ error: '找不到資料' })
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(500).json({ error: e.message || '刪除失敗' })
+  }
 })
 
-/**
- * 舊：回傳前兩品項的成本合計（保留相容）
- */
+// 取得某日整體出庫金額（依品項彙總）
 router.get('/total/:date', async (req, res) => {
   const { date } = req.params
-  const items = await Item.find({}).sort({ createdAt: 1 }).limit(2)
-  const [i1, i2] = items
-  const name1 = i1?.name
-  const name2 = i2?.name
-
-  const sumFor = async (name) => {
-    if (!name) return 0
-    const list = await OutRecord.find({ date, item: name })
-    return list.reduce((s, r) => s + Number(r.price || 0), 0)
-  }
-
-  const totalGroup1 = Number((await sumFor(name1)).toFixed(2))
-  const totalGroup2 = Number((await sumFor(name2)).toFixed(2))
-
-  res.json({ totalGroup1, totalGroup2, item1Name: name1 || '', item2Name: name2 || '' })
-})
-
-/**
- * 新：回傳該日「每個品項」的成本合計
- * { totals: { [itemName]: number } }
- */
-router.get('/totalByItem/:date', async (req, res) => {
-  const { date } = req.params
   const list = await OutRecord.find({ date })
-  const totals = {}
+  const byItem = {}
+  let total = 0
   for (const r of list) {
-    totals[r.item] = (totals[r.item] || 0) + Number(r.price || 0)
+    byItem[r.item] = (byItem[r.item] || 0) + Number(r.price || 0)
+    total += Number(r.price || 0)
   }
-  // 固定到兩位小數
-  for (const k of Object.keys(totals)) {
-    totals[k] = Number(totals[k].toFixed(2))
-  }
-  res.json({ totals })
+  res.json({ total, byItem })
 })
 
 export default router
