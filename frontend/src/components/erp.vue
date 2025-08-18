@@ -431,6 +431,9 @@ watch(items, () => {
   reportQty.value = map
 }, { deep: true })
 
+// 判斷該成品當日是否「有回傳基礎成本」
+const hasBaseCost = (name) => Object.prototype.hasOwnProperty.call((reportCostsByItem.value || {}), name)
+
 // 單列顯示：營業收入（預設空值）
 const perProductRevenue = (it) => {
   const q = Number(reportQty.value[it.name] || 0)
@@ -438,12 +441,16 @@ const perProductRevenue = (it) => {
   return (q * Number(it.salePrice || 0)).toFixed(0)
 }
 
-// 單列顯示：銷貨成本 = 後端基礎成本 + 份數 × 耗材（預設空值）
+// 單列顯示：銷貨成本 = 後端基礎成本 + 份數 × 耗材
+// 若「當日無基礎成本」則一律顯示空值（不管份數），並在送出時禁止該品項份數>0
 const perProductCost = (it) => {
-  const base = Number((reportCostsByItem.value || {})[it.name] || 0)
+  const baseExists = hasBaseCost(it.name)
   const qty  = Number(reportQty.value[it.name] || 0)
+  const base = baseExists ? Number((reportCostsByItem.value || {})[it.name] || 0) : null
   const extra = qty * Number(consumableMap.value[it.name] || 0)
-  if (base === 0 && qty === 0) return '' // 顯示空值
+
+  if (!baseExists) return ''                       // 顯示空（缺基礎成本）
+  if (base === 0 && qty === 0) return ''           // 顯示空（兩者皆 0）
   return (base + extra).toFixed(2)
 }
 
@@ -471,9 +478,20 @@ const totalProductQty = computed(() =>
   productItems.value.reduce((s, it) => s + Number(reportQty.value[it.name] || 0), 0)
 )
 
-// 送出報表
+// 送出報表（新增規則：若某成品「銷貨成本為空」則該品項份數必須為 0）
 const submitReport = async () => {
   if (!selectedDate5.value) { alert('❌ 請先選擇報表日期'); return }
+
+  // 檢查：成本為空(當日無基礎成本)卻填了份數
+  const invalid = productItems.value.filter(it => {
+    const qty = Number(reportQty.value[it.name] || 0)
+    return !hasBaseCost(it.name) && qty > 0
+  })
+  if (invalid.length > 0) {
+    alert('❌ 以下成品「銷貨成本」為空，份數必須為 0：\n' + invalid.map(i => `• ${i.name}`).join('\n'))
+    return
+  }
+
   if (Number(costTotal.value || 0) === 0 && Number(totalProductQty.value || 0) <= 0) {
     alert('❌ 銷貨成本為 0，份數必須大於 0 才能送出')
     return
@@ -936,7 +954,7 @@ watch(currentPage4, async (p) => {
         <div class="form-wrapper">
           <h5 class="title">報表紀錄</h5>
 
-          <div class="d-flex justify-content-center mt-3">
+        <div class="d-flex justify-content-center mt-3">
             <div class="d-flex align-items-center gap-3 mb-3" style="width:100%;max-width:330px;">
               <div style="font-size:14px;white-space:nowrap;">日期&ensp;:</div>
               <input type="date" v-model="selectedDate5" class="form-control" style="min-height:42px;flex:1;" @change="fetchTotalAmount"/>
@@ -1019,7 +1037,7 @@ watch(currentPage4, async (p) => {
 </template>
 
 <style scoped>
-.item { background-color:#b2afaf; width:50%; cursor:pointer; transition:background-color .2s; box-shadow:2px 2px 8px rgba(0,0,0,.2);}
+.item { background-color:#b2afaf; width:50%; cursor:pointer; transition:background-color .2s; box-shadow:2px 2px 8px rgba(0,0,0,.2); }
 .item.active { background-color:#6c6d6e; color:#fff; }
 .page-content { padding:20px; min-height:200px; text-align:center; font-size:1.2rem; }
 input[type="date"] { padding:8px 24px; font-size:1rem; border:1px solid #ccc; border-radius:4px; width:50%; }
@@ -1062,7 +1080,7 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance:none; margin:
 /* 欄位寬度（1:成品名稱 2:售價 3:耗材 4:綁定 5:操作） */
 .product-table th:nth-child(1), .product-table td:nth-child(1) { width: 80px; }
 .product-table th:nth-child(2), .product-table td:nth-child(2) { width: 70px; }
-.product-table th:nth-child(3), .product-table td:nth-child(3) { width: 70px; }  /* ← 修正 px 單位 */
+.product-table th:nth-child(3), .product-table td:nth-child(3) { width: 70px; }
 .product-table th:nth-child(4), .product-table td:nth-child(4) { width: 80px; }
 .product-table th:nth-child(5), .product-table td:nth-child(5) { width: 70px; }
 </style>
