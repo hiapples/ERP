@@ -953,7 +953,7 @@ watch(currentPage4, async (p) => {
         </div>
 
         <div class="form-wrapper">
-          <h5 class="title">報表總攬</h5>
+          <h5 class="title">報表總覽</h5>
 
           <div v-if="isReportsLoading" style="font-size:14px;color:#888;">載入中...</div>
           <div v-else>
