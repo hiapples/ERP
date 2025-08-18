@@ -744,9 +744,13 @@ watch(currentPage4, async (p) => {
                 <template v-else>{{ it.bindRaw || '（未綁定）' }}</template>
               </td>
               <td class="text-center">
+                <!-- 編輯中：同時顯示【存】與【刪】 -->
                 <template v-if="itemEditingId === it._id">
                   <button class="update-btn" @click="confirmEditItem(it)">存</button>
+                  <button class="delete-btn ms-2" @click="deleteItem(it._id)">刪</button>
                 </template>
+
+                <!-- 未編輯：維持原本【改】【刪】 -->
                 <template v-else>
                   <button class="update-btn" @click="startEditItem(it._id)">改</button>
                   <button class="delete-btn ms-2" @click="deleteItem(it._id)">刪</button>
