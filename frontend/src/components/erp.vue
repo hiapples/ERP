@@ -1029,7 +1029,7 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance:none; margin:
 /* 欄位寬度（可再自行微調數值） */
 .product-table th:nth-child(1), .product-table td:nth-child(1) { width: 90px; } /* 成品名稱 */
 .product-table th:nth-child(2), .product-table td:nth-child(2) { width: 70px; } /* 售價 */
-.product-table th:nth-child(3), .product-table td:nth-child(3) { width: 70x; } /* 綁定原料 */
+.product-table th:nth-child(3), .product-table td:nth-child(3) { width: 70px; } /* 綁定原料 */
 .product-table th:nth-child(4), .product-table td:nth-child(4) { width: 50px; } /* 操作鈕區 */
 
 
