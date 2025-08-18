@@ -39,6 +39,17 @@ const productItems = computed(() => _arr(items.value).filter(i => i?.type === 'p
 const inOptions  = computed(() => rawItems.value.map(i => i?.name).filter(Boolean))
 const outOptions = computed(() => productItems.value.map(i => i?.name).filter(Boolean))
 
+// ===== 新增：成品→原料映射與出庫品名正規化（為了讓出庫總覽一定有資料、且用原料視圖） =====
+const prodToRawMap = computed(() => {
+  const m = {}
+  for (const p of productItems.value) {
+    if (p?.name && p?.bindRaw) m[p.name] = p.bindRaw
+  }
+  return m
+})
+const isRawName = (name) => rawItems.value.some(r => r?.name === name)
+const normalizeOutItem = (name) => (isRawName(name) ? name : (prodToRawMap.value[name] || name))
+
 // 單筆輸入（維持原本表格欄位）
 const inRow  = ref({ item: '', quantity: '', price: '', note: '' })  // 原料入庫
 const outRow = ref({ item: '', quantity: '', note: '' })             // 成品出庫（轉扣原料）
@@ -81,19 +92,21 @@ const fetchRecords = async () => {
     alert('❌ 無法取得入庫資料：' + err.message)
   }
 }
+
+// === 調整出庫讀取：只用日期向後端查，其餘用前端轉換/過濾（避免舊成品名被後端 item 過濾掉） ===
 const fetchRecords2 = async () => {
   try {
     let url = `${API}/outrecords`
     const q = []
     if (selectedDate4.value) q.push('date=' + selectedDate4.value)
-    if (selectedItem2.value) q.push('item=' + encodeURIComponent(selectedItem2.value)) // 以原料名查
     if (q.length) url += '?' + q.join('&')
     const { data } = await axios.get(url)
-    recordList2.value = _arrData(data)
+    recordList2.value = _arrData(data) // 不做 item 過濾，統一交給前端
   } catch (err) {
     alert('❌ 無法取得出庫資料：' + err.message)
   }
 }
+
 const fetchRecords3 = async () => {
   try {
     isLoading.value = true
@@ -109,6 +122,18 @@ const fetchRecords3 = async () => {
     isLoading.value = false
   }
 }
+
+// === 出庫列表的前端視圖：永遠顯示為「原料名」，並在這裡做日期/品項(原料)過濾 ===
+const outListView = computed(() => {
+  return recordList2.value
+    .filter(r => {
+      const dateOk = !selectedDate4.value || r?.date === selectedDate4.value
+      const itemRaw = normalizeOutItem(r?.item)
+      const itemOk = !selectedItem2.value || itemRaw === selectedItem2.value
+      return dateOk && itemOk
+    })
+    .map(r => ({ ...r, _displayItem: normalizeOutItem(r?.item) }))
+})
 
 // === 平均成本(以整筆金額加權) & 庫存彙總（僅原料） ===
 // 重點：出庫扣量同時考慮兩種型態：
@@ -198,7 +223,7 @@ function checkOutStock () {
 
   const left = inQty - (outQtyRaw + outQtyProd)
   if (needQty > left + 1e-9) {
-    alert(`❌【${rawName}】庫存不足，需要 ${needQty.toFixed(2)}g，現有 ${left.toFixed(2)}g`)
+    alert('❌【${rawName}】庫存不足，需要 ' + needQty.toFixed(2) + 'g，現有 ' + left.toFixed(2) + 'g')
     return false
   }
   return true
@@ -246,7 +271,7 @@ const submitOut = async () => {
       item: rawName, // 以原料扣庫
       quantity: rawQty,
       price: lineTotal,
-      note: (row.note || '') + `（由成品「${row.item}」轉扣，單價=${unit.toFixed(2)}）`,
+      note: (row.note || '') + '（由成品「' + row.item + '」轉扣，單價=' + unit.toFixed(2) + '）',
       date: selectedDate3.value
     }
     await axios.post(`${API}/outrecords`, payload)
@@ -349,7 +374,7 @@ const deleteItem = async (id) => {
     await axios.delete(`${API}/items/${id}`)
     await fetchItems()
   } catch (e) {
-    alert('刪除失敗：' + e.message)
+    alert('刪除失敗：' + (e?.message || ''))
   }
 }
 
@@ -432,7 +457,7 @@ async function fetchReportsList () {
 }
 const deleteReportByDate = async (dateStr) => {
   if (!dateStr) return
-  if (!confirm(`❌ 確定要清除 ${dateStr} 的報表資料嗎？`)) return
+  if (!confirm('❌ 確定要清除 ' + dateStr + ' 的報表資料嗎？')) return
   try {
     await axios.delete(`${API}/reports/${encodeURIComponent(dateStr)}`)
     alert('✅ 已清除該日報表資料')
@@ -737,7 +762,7 @@ watch(currentPage4, async (p) => {
             </div>
           </div>
 
-          <table>
+        <table>
             <thead><tr><th></th><th>品項</th><th>數量(g)</th><th>平均單價</th><th>備註</th></tr></thead>
             <tbody>
               <tr>
@@ -758,7 +783,7 @@ watch(currentPage4, async (p) => {
         </div>
       </div>
 
-      <!-- 出庫總覽（樣式對齊入庫總覽：日期 + 品項(原料) 篩選；欄位一致） -->
+      <!-- 出庫總覽（以原料視角顯示；舊成品紀錄也會出現） -->
       <div v-else-if="currentPage3 === 'two-2'">
         <div class="d-flex justify-content-center align-items-center">
           <button style="min-width:330px;" class="btn mb-3" :class="{ active: currentPage3 === 'one-1' }" @click="currentPage3 = 'one-1'">新增出庫</button>
@@ -775,7 +800,7 @@ watch(currentPage4, async (p) => {
           </div>
 
           <div class="d-flex justify-content-center mt-3">
-            <div class="d-flex align-items-center gap-3 mb-3" style="width:100%;max-width:330px;">
+            <div class="d-flex align-items-center mb-3 gap-3" style="width:100%;max-width:330px;">
               <div style="font-size:14px;white-space:nowrap;">品項&ensp;:</div>
               <select v-model="selectedItem2" style="min-height:42px;font-size:14px;flex:1;">
                 <option value=""></option>
@@ -787,7 +812,7 @@ watch(currentPage4, async (p) => {
           <table>
             <thead><tr><th></th><th>品項</th><th>數量</th><th>整筆價格</th><th>備註</th><th v-if="!editingId">日期</th></tr></thead>
             <tbody>
-              <tr v-for="record in recordList2" :key="record._id">
+              <tr v-for="record in outListView" :key="record._id">
                 <td class="button">
                   <template v-if="editingId === record._id">
                     <button class="delete-btn" @click="deleteRecord2(record._id)">刪</button>
@@ -800,10 +825,13 @@ watch(currentPage4, async (p) => {
                 <td class="items">
                   <template v-if="editingId === record._id">
                     <select v-model="record.item">
+                      <!-- 舊資料（成品名）時，先顯示不可選提示，鼓勵改為原料名 -->
+                      <option v-if="!isRawName(record.item) && record.item"
+                              :value="record.item" disabled>（舊：{{ record.item }}）</option>
                       <option v-for="option in inOptions" :key="option" :value="option">{{ option }}</option>
                     </select>
                   </template>
-                  <template v-else>{{ record.item }}</template>
+                  <template v-else>{{ record._displayItem }}</template>
                 </td>
 
                 <td class="qty">
@@ -943,7 +971,6 @@ input { width:100%; padding:4px; box-sizing:border-box; border:1px solid #ccc; b
 select { width:100%; border:1px solid #ccc; border-radius:4px; box-sizing:border-box; }
 td select, td input { min-height:30px; }
 
-/* 保持原本欄寬設定 */
 .items{ min-width:80px; }
 .qty, .price, .price-text, .note { min-width:60px; }
 .button{ max-width:20px; padding-left:0!important; padding-right:25px!important; }
