@@ -1023,10 +1023,10 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance:none; margin:
 }
 
 /* 欄位寬度（可再自行微調數值） */
-.product-table th:nth-child(1), .product-table td:nth-child(1) { width: 160px; } /* 成品名稱 */
-.product-table th:nth-child(2), .product-table td:nth-child(2) { width: 110px; } /* 售價 */
-.product-table th:nth-child(3), .product-table td:nth-child(3) { width: 180px; } /* 綁定原料 */
-.product-table th:nth-child(4), .product-table td:nth-child(4) { width: 120px; } /* 操作鈕區 */
+.product-table th:nth-child(1), .product-table td:nth-child(1) { width: 110px; } /* 成品名稱 */
+.product-table th:nth-child(2), .product-table td:nth-child(2) { width: 60px; } /* 售價 */
+.product-table th:nth-child(3), .product-table td:nth-child(3) { width: 120px; } /* 綁定原料 */
+.product-table th:nth-child(4), .product-table td:nth-child(4) { width: 70px; } /* 操作鈕區 */
 
 
 </style>
