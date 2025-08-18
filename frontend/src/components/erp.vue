@@ -273,7 +273,7 @@ const submitOut = async () => {
     const rawQty    = Number(Number(row.quantity).toFixed(2)) // 原料扣量(g)
     const unit      = Number(getAvgPrice(rawName))            // 綁定原料平均單價
     const lineTotal = Number((unit * rawQty).toFixed(2))
-    const noteStr = [row.note, `（由成品「${row.item}」轉扣，單價=${unit.toFixed(2)}）`]
+    const noteStr = [row.note, `${row.item}${unit.toFixed(2)}元`]
       .filter(Boolean).join(' ')
 
     const payload = {
@@ -952,7 +952,7 @@ watch(currentPage4, async (p) => {
         </div>
 
         <div class="form-wrapper">
-          <h5 class="title">報表總攬</h5>
+          <h5 class="title">報表總覽</h5>
 
           <div v-if="isReportsLoading" style="font-size:14px;color:#888;">載入中...</div>
           <div v-else>
@@ -1023,10 +1023,10 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance:none; margin:
 }
 
 /* 欄位寬度（可再自行微調數值） */
-.product-table th:nth-child(1), .product-table td:nth-child(1) { width: 110px; } /* 成品名稱 */
-.product-table th:nth-child(2), .product-table td:nth-child(2) { width: 60px; } /* 售價 */
-.product-table th:nth-child(3), .product-table td:nth-child(3) { width: 120px; } /* 綁定原料 */
-.product-table th:nth-child(4), .product-table td:nth-child(4) { width: 70px; } /* 操作鈕區 */
+.product-table th:nth-child(1), .product-table td:nth-child(1) { width: 90px; } /* 成品名稱 */
+.product-table th:nth-child(2), .product-table td:nth-child(2) { width: 40px; } /* 售價 */
+.product-table th:nth-child(3), .product-table td:nth-child(3) { width: 100x; } /* 綁定原料 */
+.product-table th:nth-child(4), .product-table td:nth-child(4) { width: 50px; } /* 操作鈕區 */
 
 
 </style>
