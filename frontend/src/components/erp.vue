@@ -273,14 +273,14 @@ const submitOut = async () => {
     const rawQty    = Number(Number(row.quantity).toFixed(2)) // 原料扣量(g)
     const unit      = Number(getAvgPrice(rawName))            // 綁定原料平均單價
     const lineTotal = Number((unit * rawQty).toFixed(2))
-    const noteStr   = [row.note, `（由成品「${row.item}」轉扣，單價=${unit.toFixed(2)}）`]
-                        .filter(Boolean).join(' ')
+    const noteStr = [row.note, `（由成品「${row.item}」轉扣，單價=${unit.toFixed(2)}）`]
+      .filter(Boolean).join(' ')
 
     const payload = {
-      item: rawName,                // 以原料扣庫（新制）
+      item: rawName,
       quantity: rawQty,
       price: lineTotal,
-      note: noteStr,                // ★ 後端可由此解析對應成品
+      note: noteStr,           // ★ 用這個格式
       date: selectedDate3.value
     }
     await axios.post(`${API}/outrecords`, payload)
@@ -288,8 +288,10 @@ const submitOut = async () => {
 
     // 重新載入入/出庫 &（若已選日期）刷新報表成本
     await fetchRecords3()
+    if (selectedDate5.value !== selectedDate3.value) selectedDate5.value = selectedDate3.value
     await fetchTotalAmount()
     clearOut()
+
   } catch (err) {
     alert('❌ 發送失敗：' + err.message)
   }
@@ -719,7 +721,7 @@ watch(currentPage4, async (p) => {
               <th>成品名稱</th>
               <th>售價</th>
               <th class="bind-head">綁定</th>
-              <th style="width:160px;"></th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -732,9 +734,9 @@ watch(currentPage4, async (p) => {
                 <template v-if="itemEditingId === it._id"><input type="number" step="0.01" min="0" v-model.number="it.salePrice" /></template>
                 <template v-else>{{ Number(it.salePrice || 0).toFixed(2) }}</template>
               </td>
-              <td class="bind-col">
+              <td>
                 <template v-if="itemEditingId === it._id">
-                  <select v-model="it.bindRaw" class="bind-select">
+                  <select v-model="it.bindRaw">
                     <option value=""></option>
                     <option v-for="r in rawItems" :key="r._id" :value="r.name">{{ r.name }}</option>
                   </select>
@@ -1011,8 +1013,5 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance:none; margin:
 .report-table tbody tr { height:56px; }
 .report-table tbody td { vertical-align:middle; }
 
-/* ★ 綁定欄位加寬（欄、下拉都加寬） */
-.bind-head { min-width: 240px; }
-.bind-col { min-width: 240px; }
-.bind-select { min-width: 240px; max-width: 100%; }
+
 </style>
