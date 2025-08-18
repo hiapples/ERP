@@ -22,13 +22,16 @@ const selectedDate5 = ref(today)
 
 // 清單
 const recordList = ref([])   // 入庫（原料）
-const recordList2 = ref([])  // 出庫（以綁定原料扣或舊資料為成品名）
+const recordList2 = ref([])  // 出庫（可能是原料名或成品名）
 const isLoading = ref(false)
 
 // 品項（動態從 DB）
 // 原料：{ _id, name, type:'raw' }
 // 成品：{ _id, name, salePrice, type:'product', bindRaw:'原料名稱' }
 const items = ref([])
+
+// ====== 共用小工具（處理空值、去頭尾空白，避免比對失敗） ======
+const norm = (v) => (v == null ? '' : String(v).trim())
 
 // 防呆：items 不是陣列也不炸
 const _arr = (v) => (Array.isArray(v) ? v : (Array.isArray(v?.items) ? v.items : []))
@@ -39,21 +42,43 @@ const productItems = computed(() => _arr(items.value).filter(i => i?.type === 'p
 const inOptions  = computed(() => rawItems.value.map(i => i?.name).filter(Boolean))
 const outOptions = computed(() => productItems.value.map(i => i?.name).filter(Boolean))
 
-// ===== 新增：成品→原料映射與出庫品名正規化（為了讓出庫總覽一定有資料、且用原料視圖） =====
-const prodToRawMap = computed(() => {
+// —— 取得「以正規化名稱」找回原料的顯示名稱（保留你建立時的大小寫） ——
+const getRawDisplayByNorm = (rawNormName) => {
+  const hit = rawItems.value.find(r => norm(r?.name) === rawNormName)
+  return hit ? hit.name : rawNormName
+}
+
+// ===== 成品→原料映射（皆用正規化鍵值），並提供判斷/轉換工具 =====
+const prodToRawMapNorm = computed(() => {
   const m = {}
   for (const p of productItems.value) {
-    if (p?.name && p?.bindRaw) m[p.name] = p.bindRaw
+    const pn = norm(p?.name)
+    const rn = norm(p?.bindRaw)
+    if (pn && rn) m[pn] = rn
   }
   return m
 })
-const isRawName = (name) => rawItems.value.some(r => r?.name === name)
-const normalizeOutItem = (name) => (isRawName(name) ? name : (prodToRawMap.value[name] || name))
+const isRawName = (name) => {
+  const n = norm(name)
+  return rawItems.value.some(r => norm(r?.name) === n)
+}
+// 回傳「正規化後」的原料名；若是成品，轉它綁定的原料；若都不是就回原字串
+const toRawNorm = (name) => {
+  const n = norm(name)
+  if (!n) return ''
+  if (isRawName(n)) return n
+  return prodToRawMapNorm.value[n] || n
+}
+// 顯示用（回傳「原料顯示名稱」）
+const toRawDisplay = (name) => {
+  const rawN = toRawNorm(name)   // 正規化原料名
+  return getRawDisplayByNorm(rawN)
+}
 
 // 單筆輸入（維持原本表格欄位）
 const inRow  = ref({ item: '', quantity: '', price: '', note: '' })  // 原料入庫
 const outRow = ref({ item: '', quantity: '', note: '' })             // 成品出庫（轉扣原料）
-const outUnitPrice = ref('') // 出庫平均單價：自動帶入綁定原料的平均單價（唯讀顯示）
+const outUnitPrice = ref('') // 出庫平均單價（顯示）= 綁定原料平均單價
 
 const editingId = ref(null)
 const selectedItem  = ref('') // 入庫查詢用（原料）
@@ -93,7 +118,7 @@ const fetchRecords = async () => {
   }
 }
 
-// === 調整出庫讀取：只用日期向後端查，其餘用前端轉換/過濾（避免舊成品名被後端 item 過濾掉） ===
+// 出庫讀取：只用日期向後端查，其餘前端轉換/過濾（避免舊成品名被後端 item 過濾掉）
 const fetchRecords2 = async () => {
   try {
     let url = `${API}/outrecords`
@@ -101,7 +126,7 @@ const fetchRecords2 = async () => {
     if (selectedDate4.value) q.push('date=' + selectedDate4.value)
     if (q.length) url += '?' + q.join('&')
     const { data } = await axios.get(url)
-    recordList2.value = _arrData(data) // 不做 item 過濾，統一交給前端
+    recordList2.value = _arrData(data)
   } catch (err) {
     alert('❌ 無法取得出庫資料：' + err.message)
   }
@@ -123,63 +148,64 @@ const fetchRecords3 = async () => {
   }
 }
 
-// === 出庫列表的前端視圖：永遠顯示為「原料名」，並在這裡做日期/品項(原料)過濾 ===
-const outListView = computed(() => {
-  return recordList2.value
-    .filter(r => {
-      const dateOk = !selectedDate4.value || r?.date === selectedDate4.value
-      const itemRaw = normalizeOutItem(r?.item)
-      const itemOk = !selectedItem2.value || itemRaw === selectedItem2.value
-      return dateOk && itemOk
-    })
-    .map(r => ({ ...r, _displayItem: normalizeOutItem(r?.item) }))
+// === 出庫總覽的「過濾視圖」（保留原本物件參照，避免 v-model 改不到源資料） ===
+const recordList2Filtered = computed(() => {
+  const targetRaw = norm(selectedItem2.value)
+  const targetDate = norm(selectedDate4.value)
+  return recordList2.value.filter(r => {
+    const dateOk = !targetDate || norm(r?.date) === targetDate
+    const rawOk  = !targetRaw || toRawNorm(r?.item) === targetRaw
+    return dateOk && rawOk
+  })
 })
+const displayOutItem = (r) => toRawDisplay(r?.item)
 
 // === 平均成本(以整筆金額加權) & 庫存彙總（僅原料） ===
-// 重點：出庫扣量同時考慮兩種型態：
-//  1) 新制：outrecords.item === 原料名
-//  2) 舊制：outrecords.item === 成品名（依成品綁定的原料來歸戶）
+// 同時扣除：
+//  1) 新制：outrecords.item 為原料名
+//  2) 舊制：outrecords.item 為成品名（透過綁定轉歸原料）
 const itemSummary = computed(() => {
-  const names = inOptions.value
   const summary = []
+  const prod2raw = prodToRawMapNorm.value
 
-  // 建立「成品名 -> 綁定原料」對照
-  const prodToRaw = {}
-  for (const p of productItems.value) {
-    if (p?.name && p?.bindRaw) prodToRaw[p.name] = p.bindRaw
-  }
+  for (const rawName of inOptions.value) {
+    const rawNorm = norm(rawName)
 
-  for (const item of names) {
-    const inRecords  = recordList.value.filter(r => r?.item === item)
+    const inRecords  = recordList.value.filter(r => norm(r?.item) === rawNorm)
+    const outByRaw   = recordList2.value.filter(r => norm(r?.item) === rawNorm)
+    const outByProd  = recordList2.value.filter(r => prod2raw[norm(r?.item)] === rawNorm)
 
-    // 出庫：直接扣該原料
-    const outByRaw   = recordList2.value.filter(r => r?.item === item)
-    // 出庫：以成品名出（舊資料），且該成品綁定此原料
-    const outByProd  = recordList2.value.filter(r => prodToRaw[r?.item] === item)
+    // 合併所有會扣到這個原料的出庫
+    const outRecords = outByRaw.concat(outByProd)
 
-    const outRecords = [...outByRaw, ...outByProd]
+    const inQty      = inRecords.reduce((s, r) => s + Number(r?.quantity || 0), 0)
+    const inSumPrice = inRecords.reduce((s, r) => s + Number(r?.price || 0), 0)
 
-    const inQty      = inRecords.reduce((s, r) => s + Number(r?.quantity), 0)
-    const inSumPrice = inRecords.reduce((s, r) => s + Number(r?.price), 0)
-
-    const outQty     = outRecords.reduce((s, r) => s + Number(r?.quantity), 0)
-    const outSum     = outRecords.reduce((s, r) => s + Number(r?.price), 0)
+    const outQty     = outRecords.reduce((s, r) => s + Number(r?.quantity || 0), 0)
+    const outSum     = outRecords.reduce((s, r) => s + Number(r?.price || 0), 0)
 
     const stockQty        = inQty - outQty
     const stockTotalPrice = inSumPrice - outSum
-    const avgPrice        = stockQty > 0 ? stockTotalPrice / stockQty : 0
+    const avgPrice        = stockQty > 0 ? (stockTotalPrice / stockQty) : 0
 
-    summary.push({ item, quantity: stockQty, avgPrice, totalPrice: stockTotalPrice })
+    summary.push({
+      item: getRawDisplayByNorm(rawNorm),
+      quantity: stockQty,
+      avgPrice: avgPrice,
+      totalPrice: stockTotalPrice
+    })
   }
   return summary
 })
+
 const getAvgPrice = (rawName) => {
-  const f = itemSummary.value.find(i => i.item === rawName)
-  return f ? f.avgPrice : 0
+  const n = norm(rawName)
+  const row = itemSummary.value.find(i => norm(i.item) === n)
+  return row ? row.avgPrice : 0
 }
 
 // 綁定工具
-function findProduct(name) { return productItems.value.find(p => p?.name === name) || null }
+function findProduct(name) { return productItems.value.find(p => norm(p?.name) === norm(name)) || null }
 function getBinding(productName) {
   const p = findProduct(productName)
   if (!p || !p.bindRaw) return null
@@ -189,7 +215,7 @@ function getBinding(productName) {
 // 出庫選擇或資料更新時，自動帶入對應原料的平均單價（唯讀）
 function autoFillOutUnitPrice() {
   const bind = getBinding(outRow.value.item)
-  if (bind?.rawName) outUnitPrice.value = Number(getAvgPrice(bind.rawName).toFixed(2))
+  if (bind && bind.rawName) outUnitPrice.value = Number(getAvgPrice(bind.rawName).toFixed(2))
   else outUnitPrice.value = ''
 }
 watch(() => outRow.value.item, autoFillOutUnitPrice)
@@ -207,23 +233,22 @@ function checkOutStock () {
   const rawName = bind.rawName
   const needQty = Number(row.quantity) // 直接以輸入的「數量(g)」當作原料扣量
 
+  const rawNorm = norm(rawName)
   const inQty = recordList.value
-    .filter(r => r?.item === rawName)
-    .reduce((s, r) => s + Number(r?.quantity), 0)
+    .filter(r => norm(r?.item) === rawNorm)
+    .reduce((s, r) => s + Number(r?.quantity || 0), 0)
 
-  // 同步考量舊制（以成品名扣，理論上本頁不會新增舊制，但為安全仍計入）
-  const prodToRaw = {}
-  for (const p of productItems.value) if (p?.name && p?.bindRaw) prodToRaw[p.name] = p.bindRaw
+  const prod2raw = prodToRawMapNorm.value
   const outQtyRaw = recordList2.value
-    .filter(r => r?.item === rawName)
-    .reduce((s, r) => s + Number(r?.quantity), 0)
+    .filter(r => norm(r?.item) === rawNorm)
+    .reduce((s, r) => s + Number(r?.quantity || 0), 0)
   const outQtyProd = recordList2.value
-    .filter(r => prodToRaw[r?.item] === rawName)
-    .reduce((s, r) => s + Number(r?.quantity), 0)
+    .filter(r => prod2raw[norm(r?.item)] === rawNorm)
+    .reduce((s, r) => s + Number(r?.quantity || 0), 0)
 
   const left = inQty - (outQtyRaw + outQtyProd)
   if (needQty > left + 1e-9) {
-    alert('❌【${rawName}】庫存不足，需要 ' + needQty.toFixed(2) + 'g，現有 ' + left.toFixed(2) + 'g')
+    alert('❌【' + rawName + '】庫存不足，需要 ' + needQty.toFixed(2) + 'g，現有 ' + left.toFixed(2) + 'g')
     return false
   }
   return true
@@ -268,7 +293,7 @@ const submitOut = async () => {
     const lineTotal = Number((unit * rawQty).toFixed(2))
 
     const payload = {
-      item: rawName, // 以原料扣庫
+      item: rawName, // 以原料扣庫（新制）
       quantity: rawQty,
       price: lineTotal,
       note: (row.note || '') + '（由成品「' + row.item + '」轉扣，單價=' + unit.toFixed(2) + '）',
@@ -327,7 +352,7 @@ const addRawItem = async () => {
   if (!newRaw.value.name) { alert('請輸入原料名稱'); return }
   try {
     await axios.post(`${API}/items`, {
-      name: newRaw.value.name.trim(),
+      name: norm(newRaw.value.name),
       salePrice: 0,
       type: 'raw'
     })
@@ -342,10 +367,10 @@ const addProductItem = async () => {
   if (!newProduct.value.bindRaw) { alert('請選擇綁定的原料'); return }
   try {
     await axios.post(`${API}/items`, {
-      name: newProduct.value.name.trim(),
+      name: norm(newProduct.value.name),
       salePrice: Number(newProduct.value.salePrice || 0),
       type: 'product',
-      bindRaw: newProduct.value.bindRaw
+      bindRaw: norm(newProduct.value.bindRaw)
     })
     newProduct.value = { name: '', salePrice: '', bindRaw: '' }
     await fetchItems()
@@ -356,11 +381,8 @@ const addProductItem = async () => {
 const startEditItem = (id) => { itemEditingId.value = id }
 const confirmEditItem = async (it) => {
   try {
-    const body = {
-      name: it.name,
-      salePrice: Number(it.salePrice || 0)
-    }
-    if (it.type === 'product') body.bindRaw = it.bindRaw || ''
+    const body = { name: norm(it.name), salePrice: Number(it.salePrice || 0) }
+    if (it.type === 'product') body.bindRaw = norm(it.bindRaw || '')
     await axios.put(`${API}/items/${it._id}`, body)
     itemEditingId.value = null
     await fetchItems()
@@ -503,7 +525,7 @@ watch(currentPage4, async (p) => {
   </div>
 
   <div class="page-content mt-4">
-    <!-- 入庫（維持原樣式） -->
+    <!-- 入庫 -->
     <div v-if="currentPage === 'one'">
       <div v-if="currentPage2 === 'one-1'">
         <div class="d-flex justify-content-center align-items-center">
@@ -746,7 +768,7 @@ watch(currentPage4, async (p) => {
       </div>
     </div>
 
-    <!-- 出庫（平均單價自動設定為綁定原料；唯讀顯示） -->
+    <!-- 出庫 -->
     <div v-if="currentPage === 'three'">
       <div v-if="currentPage3 === 'one-1'">
         <div class="d-flex justify-content-center align-items-center">
@@ -762,7 +784,7 @@ watch(currentPage4, async (p) => {
             </div>
           </div>
 
-        <table>
+          <table>
             <thead><tr><th></th><th>品項</th><th>數量(g)</th><th>平均單價</th><th>備註</th></tr></thead>
             <tbody>
               <tr>
@@ -783,7 +805,7 @@ watch(currentPage4, async (p) => {
         </div>
       </div>
 
-      <!-- 出庫總覽（以原料視角顯示；舊成品紀錄也會出現） -->
+      <!-- 出庫總覽（以原料視角顯示；舊成品紀錄也會顯示並可改成原料名） -->
       <div v-else-if="currentPage3 === 'two-2'">
         <div class="d-flex justify-content-center align-items-center">
           <button style="min-width:330px;" class="btn mb-3" :class="{ active: currentPage3 === 'one-1' }" @click="currentPage3 = 'one-1'">新增出庫</button>
@@ -812,7 +834,7 @@ watch(currentPage4, async (p) => {
           <table>
             <thead><tr><th></th><th>品項</th><th>數量</th><th>整筆價格</th><th>備註</th><th v-if="!editingId">日期</th></tr></thead>
             <tbody>
-              <tr v-for="record in outListView" :key="record._id">
+              <tr v-for="record in recordList2Filtered" :key="record._id">
                 <td class="button">
                   <template v-if="editingId === record._id">
                     <button class="delete-btn" @click="deleteRecord2(record._id)">刪</button>
@@ -831,7 +853,7 @@ watch(currentPage4, async (p) => {
                       <option v-for="option in inOptions" :key="option" :value="option">{{ option }}</option>
                     </select>
                   </template>
-                  <template v-else>{{ record._displayItem }}</template>
+                  <template v-else>{{ displayOutItem(record) }}</template>
                 </td>
 
                 <td class="qty">
