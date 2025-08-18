@@ -296,7 +296,7 @@ const submitOut = async () => {
       item: rawName, // 以原料扣庫（新制）
       quantity: rawQty,
       price: lineTotal,
-      note: (row.note || '') + '（由成品「' + row.item + '」轉扣，單價=' + unit.toFixed(2) + '）',
+      note: (row.note || '') + row.item + '單價=' + unit.toFixed(2) + '）',
       date: selectedDate3.value
     }
     await axios.post(`${API}/outrecords`, payload)
