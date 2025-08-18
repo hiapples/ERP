@@ -973,7 +973,7 @@ watch(currentPage4, async (p) => {
           </div>
           <div class="d-flex justify-content-center align-items-center gap-3 mt-2">
             <label>額外支出：</label>
-            <input v-model.number="extraExpense" type="number" min="0" step="1" class="form-control text中心 report2" />
+            <input v-model.number="extraExpense" type="number" min="0" step="1" class="form-control text-center report2" />
           </div>
           <div class="d-flex justify-content-center align-items-center gap-3 mt-2">
             <div class="fw-bold">淨利：</div>
