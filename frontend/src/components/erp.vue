@@ -478,11 +478,18 @@ const totalProductQty = computed(() =>
   productItems.value.reduce((s, it) => s + Number(reportQty.value[it.name] || 0), 0)
 )
 
-// 送出報表（新增規則：若某成品「銷貨成本為空」則該品項份數必須為 0）
+// 送出報表（所有欄位必須填值；無基礎成本的成品份數必須為 0）
 const submitReport = async () => {
   if (!selectedDate5.value) { alert('❌ 請先選擇報表日期'); return }
 
-  // 檢查：成本為空(當日無基礎成本)卻填了份數
+  // 1) 份數一律要填（空白不行，0 可以）
+  const unfilled = productItems.value.filter(it => isEmpty(reportQty.value[it.name]))
+  if (unfilled.length > 0) {
+    alert('❌ 以下成品的「份數」尚未填寫（可填 0）：\n' + unfilled.map(i => `• ${i.name}`).join('\n'))
+    return
+  }
+
+  // 2) 成本為空(當日無基礎成本)卻填了份數
   const invalid = productItems.value.filter(it => {
     const qty = Number(reportQty.value[it.name] || 0)
     return !hasBaseCost(it.name) && qty > 0
@@ -492,10 +499,18 @@ const submitReport = async () => {
     return
   }
 
+  // 3) 固定支出 / 額外支出 必須填值（0 可）
+  if (isEmpty(fixedExpense.value) || isEmpty(extraExpense.value)) {
+    alert('❌ 請填寫「固定支出」與「額外支出」（可填 0）')
+    return
+  }
+
+  // 4) 原本檢查：若總成本為 0 且總份數 <= 0，不可送出
   if (Number(costTotal.value || 0) === 0 && Number(totalProductQty.value || 0) <= 0) {
     alert('❌ 銷貨成本為 0，份數必須大於 0 才能送出')
     return
   }
+
   const payload = {
     date: selectedDate5.value,
     items: productItems.value.map(it => ({ item: it.name, qty: Number(reportQty.value[it.name] || 0) })),
@@ -954,7 +969,7 @@ watch(currentPage4, async (p) => {
         <div class="form-wrapper">
           <h5 class="title">報表紀錄</h5>
 
-        <div class="d-flex justify-content-center mt-3">
+          <div class="d-flex justify-content-center mt-3">
             <div class="d-flex align-items-center gap-3 mb-3" style="width:100%;max-width:330px;">
               <div style="font-size:14px;white-space:nowrap;">日期&ensp;:</div>
               <input type="date" v-model="selectedDate5" class="form-control" style="min-height:42px;flex:1;" @change="fetchTotalAmount"/>
@@ -1013,7 +1028,7 @@ watch(currentPage4, async (p) => {
         <div class="form-wrapper">
           <h5 class="title">報表總覽</h5>
 
-          <div v-if="isReportsLoading" style="font-size:14px;color:#888;">載入中...</div>
+        <div v-if="isReportsLoading" style="font-size:14px;color:#888;">載入中...</div>
           <div v-else>
             <div v-if="reportList.length > 0" style="font-size:14px;">
               <table class="table report-table">
