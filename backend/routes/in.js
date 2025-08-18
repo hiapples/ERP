@@ -4,13 +4,14 @@ import InRecord from '../models/in.js'
 import Item from '../models/item.js'
 
 const router = express.Router()
+const norm = (v) => (v == null ? '' : String(v).trim())
 
 // 查詢
 router.get('/', async (req, res) => {
   const { date, item } = req.query
   const q = {}
-  if (date) q.date = date
-  if (item) q.item = item
+  if (date) q.date = String(date)
+  if (item) q.item = norm(item)
   const list = await InRecord.find(q).sort({ createdAt: -1 })
   res.json(list)
 })
@@ -18,25 +19,25 @@ router.get('/', async (req, res) => {
 // 新增（限制只能入庫原料）
 router.post('/', async (req, res) => {
   try {
-    const { item, quantity, price, note = '', date } = req.body
-    if (!item || !date) return res.status(400).json({ error: '缺少 item 或 date' })
+    const { item, quantity, price, note = '', date } = req.body || {}
+    const itemName = norm(item)
+    if (!itemName || !date) return res.status(400).json({ error: '缺少 item 或 date' })
 
-    const found = await Item.findOne({ name: item })
+    const found = await Item.findOne({ name: itemName })
     if (!found) return res.status(400).json({ error: '品項不存在' })
     if (found.type !== 'raw') return res.status(400).json({ error: '只能入庫「原料」' })
 
     const payload = {
-      item,
+      item: itemName,
       quantity: Number(quantity || 0),
       price: Number(price || 0),
-      note,
-      date
+      note: String(note || ''),
+      date: String(date)
     }
     if (payload.quantity <= 0 || payload.price < 0) {
       return res.status(400).json({ error: '數量/價格不合法' })
     }
-    const created = await InRecord.create(payload)
-    res.json(created)
+    res.json(await InRecord.create(payload))
   } catch (e) {
     res.status(500).json({ error: e.message || '新增入庫失敗' })
   }
@@ -46,11 +47,10 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params
-    const { item, quantity, price, note, date } = req.body
+    const { item, quantity, price, note, date } = req.body || {}
 
-    // 如果有改 item，仍需確認是原料
     if (item) {
-      const found = await Item.findOne({ name: item })
+      const found = await Item.findOne({ name: norm(item) })
       if (!found) return res.status(400).json({ error: '品項不存在' })
       if (found.type !== 'raw') return res.status(400).json({ error: '入庫僅能是「原料」' })
     }
@@ -58,11 +58,11 @@ router.put('/:id', async (req, res) => {
     const updated = await InRecord.findByIdAndUpdate(
       id,
       {
-        ...(item ? { item } : {}),
+        ...(item !== undefined ? { item: norm(item) } : {}),
         ...(quantity !== undefined ? { quantity: Number(quantity) } : {}),
         ...(price !== undefined ? { price: Number(price) } : {}),
-        ...(note !== undefined ? { note } : {}),
-        ...(date ? { date } : {})
+        ...(note !== undefined ? { note: String(note || '') } : {}),
+        ...(date !== undefined ? { date: String(date || '') } : {})
       },
       { new: true }
     )
@@ -75,14 +75,9 @@ router.put('/:id', async (req, res) => {
 
 // 刪除
 router.delete('/:id', async (req, res) => {
-  try {
-    const { id } = req.params
-    const r = await InRecord.findByIdAndDelete(id)
-    if (!r) return res.status(404).json({ error: '找不到資料' })
-    res.json({ ok: true })
-  } catch (e) {
-    res.status(500).json({ error: e.message || '刪除失敗' })
-  }
+  const r = await InRecord.findByIdAndDelete(req.params.id)
+  if (!r) return res.status(404).json({ error: '找不到資料' })
+  res.json({ ok: true })
 })
 
 export default router
