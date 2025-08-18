@@ -1060,9 +1060,9 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance:none; margin:
 .product-table th, .product-table td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* 欄位寬度（1:成品名稱 2:售價 3:耗材 4:綁定 5:操作） */
-.product-table th:nth-child(1), .product-table td:nth-child(1) { width: 100px; }
-.product-table th:nth-child(2), .product-table td:nth-child(2) { width: 80px; }
-.product-table th:nth-child(3), .product-table td:nth-child(3) { width: 80px; }  /* ← 修正 px 單位 */
-.product-table th:nth-child(4), .product-table td:nth-child(4) { width: 110px; }
+.product-table th:nth-child(1), .product-table td:nth-child(1) { width: 80px; }
+.product-table th:nth-child(2), .product-table td:nth-child(2) { width: 70px; }
+.product-table th:nth-child(3), .product-table td:nth-child(3) { width: 70px; }  /* ← 修正 px 單位 */
+.product-table th:nth-child(4), .product-table td:nth-child(4) { width: 80px; }
 .product-table th:nth-child(5), .product-table td:nth-child(5) { width: 70px; }
 </style>
