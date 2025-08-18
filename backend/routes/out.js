@@ -112,15 +112,24 @@ router.get('/total/:date', async (req, res) => {
       bindMap[rn].push(norm(p.name))
     }
 
-    // 從備註擷取「由成品「X」轉扣」
+    // 從備註擷取成品名：同時支援舊/新格式
     const parseProductFromNote = (note) => {
       const n = note || ''
+
+      // 舊格式：由成品「X」轉扣，單價=0.10
       const m1 = n.match(/由成品[「『"]\s*([^」』"]+?)\s*[」』"]/)
       if (m1?.[1]) return norm(m1[1])
+
       const m2 = n.match(/由成品\s*["']\s*([^"']+?)\s*["']/)
       if (m2?.[1]) return norm(m2[1])
+
       const m3 = n.match(/由成品\s*([^\s，,）)]+)\s*轉扣/)
       if (m3?.[1]) return norm(m3[1])
+
+      // ★新格式：桑葚汁(瓶)0.10元 → 把「最後的數字＋元」視為單價，其前面全部視為成品名
+      const m4 = n.match(/^(.+?)\s*([0-9]+(?:\.[0-9]+)?)\s*元$/)
+      if (m4?.[1]) return norm(m4[1])
+
       return ''
     }
 
