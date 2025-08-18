@@ -280,7 +280,7 @@ const submitOut = async () => {
       item: rawName,
       quantity: rawQty,
       price: lineTotal,
-      note: noteStr,           // ★ 用這個格式
+      note: noteStr,           // 例如：桑葚汁(瓶)0.10元
       date: selectedDate3.value
     }
     await axios.post(`${API}/outrecords`, payload)
@@ -317,7 +317,7 @@ const confirmEdit2 = async () => {
     await axios.put(`${API}/outrecords/${editingId.value}`, rec)
     editingId.value = null
     await fetchRecords2()
-    await fetchTotalAmount() // ★ 出庫異動後，刷新報表成本
+    await fetchTotalAmount() // 出庫異動後，刷新報表成本
   } catch (err) {
     alert('❌ 更新失敗：' + err.message)
   }
@@ -332,7 +332,7 @@ const deleteRecord2 = async (id) => {
   try {
     await axios.delete(`${API}/outrecords/${id}`)
     await fetchRecords2()
-    await fetchTotalAmount() // ★ 出庫刪除後，刷新報表成本
+    await fetchTotalAmount() // 出庫刪除後，刷新報表成本
   } catch (err) {
     alert('❌ 刪除失敗：' + err.message)
   }
@@ -341,7 +341,7 @@ const deleteRecord2 = async (id) => {
 // === 品項設定 ===
 const itemEditingId = ref(null)
 const newRaw = ref({ name: '' })
-const newProduct = ref({ name: '', salePrice: '', bindRaw: '' })
+const newProduct = ref({ name: '', salePrice: '', bindRaw: '', consumableCost: '' })
 
 const addRawItem = async () => {
   if (!newRaw.value.name) { alert('請輸入原料名稱'); return }
@@ -365,9 +365,10 @@ const addProductItem = async () => {
       name: norm(newProduct.value.name),
       salePrice: Number(newProduct.value.salePrice || 0),
       type: 'product',
-      bindRaw: norm(newProduct.value.bindRaw)
+      bindRaw: norm(newProduct.value.bindRaw),
+      consumableCost: Number(newProduct.value.consumableCost || 0)   // ★ 新增
     })
-    newProduct.value = { name: '', salePrice: '', bindRaw: '' }
+    newProduct.value = { name: '', salePrice: '', bindRaw: '', consumableCost: '' }
     await fetchItems()
   } catch (e) {
     alert('新增失敗：' + e.message)
@@ -377,7 +378,10 @@ const startEditItem = (id) => { itemEditingId.value = id }
 const confirmEditItem = async (it) => {
   try {
     const body = { name: norm(it.name), salePrice: Number(it.salePrice || 0) }
-    if (it.type === 'product') body.bindRaw = norm(it.bindRaw || '')
+    if (it.type === 'product') {
+      body.bindRaw = norm(it.bindRaw || '')
+      body.consumableCost = Number(it.consumableCost || 0)          // ★ 新增
+    }
     await axios.put(`${API}/items/${it._id}`, body)
     itemEditingId.value = null
     await fetchItems()
@@ -401,6 +405,14 @@ const fixedExpense = ref('')
 const extraExpense = ref('')
 const reportQty = ref({}) // { [productName]: qty }
 
+// 成品名 → 每份耗材成本
+const consumableMap = computed(() => {
+  const m = {}
+  for (const it of productItems.value) m[it.name] = Number(it.consumableCost || 0)
+  return m
+})
+
+// 取得後端基礎成本
 const fetchTotalAmount = async () => {
   if (!selectedDate5.value) { reportCostsByItem.value = {}; return }
   try {
@@ -411,13 +423,29 @@ const fetchTotalAmount = async () => {
   }
 }
 
-// 品項變動時，同步報表可填 key（只對成品）
+// 品項變動時，同步報表可填 key（只對成品，預設空值不是 0）
 watch(items, () => {
   const map = { ...reportQty.value }
-  for (const it of productItems.value) if (!(it.name in map)) map[it.name] = 0
+  for (const it of productItems.value) if (!(it.name in map)) map[it.name] = ''   // 空字串
   for (const k of Object.keys(map)) if (!productItems.value.find(i => i.name === k)) delete map[k]
   reportQty.value = map
 }, { deep: true })
+
+// 單列顯示：營業收入（預設空值）
+const perProductRevenue = (it) => {
+  const q = Number(reportQty.value[it.name] || 0)
+  if (!q) return '' // 顯示空值
+  return (q * Number(it.salePrice || 0)).toFixed(0)
+}
+
+// 單列顯示：銷貨成本 = 後端基礎成本 + 份數 × 耗材（預設空值）
+const perProductCost = (it) => {
+  const base = Number((reportCostsByItem.value || {})[it.name] || 0)
+  const qty  = Number(reportQty.value[it.name] || 0)
+  const extra = qty * Number(consumableMap.value[it.name] || 0)
+  if (base === 0 && qty === 0) return '' // 顯示空值
+  return (base + extra).toFixed(2)
+}
 
 const revenueTotal = computed(() => {
   let sum = 0
@@ -427,9 +455,15 @@ const revenueTotal = computed(() => {
   }
   return sum
 })
+
+// 總成本 = 後端回傳的基礎成本加總 + Σ(份數 × 耗材成本)
 const costTotal = computed(() => {
-  return Object.values(reportCostsByItem.value).reduce((s, v) => s + Number(v || 0), 0)
+  const base = Object.values(reportCostsByItem.value).reduce((s, v) => s + Number(v || 0), 0)
+  const extra = productItems.value.reduce((s, it) =>
+    s + Number(reportQty.value[it.name] || 0) * Number(consumableMap.value[it.name] || 0), 0)
+  return base + extra
 })
+
 const netProfit = computed(() =>
   revenueTotal.value - costTotal.value - Number(fixedExpense.value || 0) - Number(extraExpense.value || 0)
 )
@@ -720,6 +754,7 @@ watch(currentPage4, async (p) => {
             <tr>
               <th>成品名稱</th>
               <th>售價</th>
+              <th>耗材</th>
               <th class="bind-head">綁定</th>
               <th></th>
             </tr>
@@ -730,9 +765,13 @@ watch(currentPage4, async (p) => {
                 <template v-if="itemEditingId === it._id"><input v-model="it.name" /></template>
                 <template v-else>{{ it.name }}</template>
               </td>
-              <td style="max-width:160px;">
+              <td style="max-width:120px;">
                 <template v-if="itemEditingId === it._id"><input type="number" step="0.01" min="0" v-model.number="it.salePrice" /></template>
                 <template v-else>{{ Number(it.salePrice || 0).toFixed(2) }}</template>
+              </td>
+              <td style="max-width:120px;">
+                <template v-if="itemEditingId === it._id"><input type="number" step="0.01" min="0" v-model.number="it.consumableCost" /></template>
+                <template v-else>{{ Number(it.consumableCost || 0).toFixed(2) }}</template>
               </td>
               <td>
                 <template v-if="itemEditingId === it._id">
@@ -744,13 +783,10 @@ watch(currentPage4, async (p) => {
                 <template v-else>{{ it.bindRaw || '（未綁定）' }}</template>
               </td>
               <td class="text-center">
-                <!-- 編輯中：同時顯示【存】與【刪】 -->
                 <template v-if="itemEditingId === it._id">
                   <button class="update-btn" @click="confirmEditItem(it)">存</button>
                   <button class="delete-btn ms-2" @click="deleteItem(it._id)">刪</button>
                 </template>
-
-                <!-- 未編輯：維持原本【改】【刪】 -->
                 <template v-else>
                   <button class="update-btn" @click="startEditItem(it._id)">改</button>
                   <button class="delete-btn ms-2" @click="deleteItem(it._id)">刪</button>
@@ -760,6 +796,7 @@ watch(currentPage4, async (p) => {
             <tr>
               <td><input placeholder="新成品名稱" v-model="newProduct.name" /></td>
               <td><input type="number" step="0.01" min="0" placeholder="售價" v-model.number="newProduct.salePrice" /></td>
+              <td><input type="number" step="0.01" min="0" placeholder="耗材" v-model.number="newProduct.consumableCost" /></td>
               <td class="bind-col">
                 <select v-model="newProduct.bindRaw" class="bind-select">
                   <option value=""></option>
@@ -915,8 +952,8 @@ watch(currentPage4, async (p) => {
                   <input v-model.number="reportQty[it.name]" type="number" min="0" step="1" class="form-control text-center report" style="display:inline-block;" />
                   <span>× {{ Number(it.salePrice || 0).toFixed(0) }}</span>
                 </td>
-                <td>{{ ((Number(reportQty[it.name] || 0)) * Number(it.salePrice || 0)).toFixed(0) }}</td>
-                <td>{{ reportCostsByItem[it.name] === undefined ? '' : Number(reportCostsByItem[it.name]).toFixed(2) }}</td>
+                <td>{{ perProductRevenue(it) }}</td>
+                <td>{{ perProductCost(it) }}</td>
               </tr>
 
               <tr><td>&ensp;</td><td>&ensp;</td><td>&ensp;</td><td>&ensp;</td></tr>
@@ -936,7 +973,7 @@ watch(currentPage4, async (p) => {
           </div>
           <div class="d-flex justify-content-center align-items-center gap-3 mt-2">
             <label>額外支出：</label>
-            <input v-model.number="extraExpense" type="number" min="0" step="1" class="form-control text-center report2" />
+            <input v-model.number="extraExpense" type="number" min="0" step="1" class="form-control text中心 report2" />
           </div>
           <div class="d-flex justify-content-center align-items-center gap-3 mt-2">
             <div class="fw-bold">淨利：</div>
@@ -962,11 +999,12 @@ watch(currentPage4, async (p) => {
           <div v-else>
             <div v-if="reportList.length > 0" style="font-size:14px;">
               <table class="table report-table">
-                <thead><tr><th>日期</th><th>筆數</th><th></th></tr></thead>
+                <thead><tr><th>日期</th><th>筆數</th><th>淨利</th><th></th></tr></thead>
                 <tbody>
                   <tr v-for="r in reportList" :key="r._id">
                     <td>{{ r.date }}</td>
                     <td>{{ Array.isArray(r.items) ? r.items.length : 0 }}</td>
+                    <td>{{ r?.netProfit == null ? '' : Number(r.netProfit).toFixed(2) }}</td>
                     <td class="text-center"><button class="delete-btn" @click="deleteReportByDate(r.date)">刪</button></td>
                   </tr>
                 </tbody>
@@ -1016,21 +1054,15 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance:none; margin:
 
 .report-table tbody tr { height:56px; }
 .report-table tbody td { vertical-align:middle; }
-/* 成品表格再收窄 */
-.product-table {
-  table-layout: fixed; /* 讓欄寬設定生效 */
-}
-.product-table th, .product-table td {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 
-/* 欄位寬度（可再自行微調數值） */
-.product-table th:nth-child(1), .product-table td:nth-child(1) { width: 90px; } /* 成品名稱 */
-.product-table th:nth-child(2), .product-table td:nth-child(2) { width: 70px; } /* 售價 */
-.product-table th:nth-child(3), .product-table td:nth-child(3) { width: 70px; } /* 綁定原料 */
-.product-table th:nth-child(4), .product-table td:nth-child(4) { width: 50px; } /* 操作鈕區 */
+/* 成品表格收窄 + 固定欄寬 */
+.product-table { table-layout: fixed; }
+.product-table th, .product-table td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-
+/* 欄位寬度（1:成品名稱 2:售價 3:耗材 4:綁定 5:操作） */
+.product-table th:nth-child(1), .product-table td:nth-child(1) { width: 100px; }
+.product-table th:nth-child(2), .product-table td:nth-child(2) { width: 80px; }
+.product-table th:nth-child(3), .product-table td:nth-child(3) { width: 80px; }  /* ← 修正 px 單位 */
+.product-table th:nth-child(4), .product-table td:nth-child(4) { width: 110px; }
+.product-table th:nth-child(5), .product-table td:nth-child(5) { width: 70px; }
 </style>
