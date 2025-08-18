@@ -715,7 +715,7 @@ watch(currentPage4, async (p) => {
 
         <!-- 成品 -->
         <h6 class="text-start mb-2 mt-4">成品</h6>
-        <table class="table">
+        <table class="table product-table">
           <thead>
             <tr>
               <th>成品名稱</th>
@@ -1012,6 +1012,21 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance:none; margin:
 
 .report-table tbody tr { height:56px; }
 .report-table tbody td { vertical-align:middle; }
+/* 成品表格再收窄 */
+.product-table {
+  table-layout: fixed; /* 讓欄寬設定生效 */
+}
+.product-table th, .product-table td {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 欄位寬度（可再自行微調數值） */
+.product-table th:nth-child(1), .product-table td:nth-child(1) { width: 160px; } /* 成品名稱 */
+.product-table th:nth-child(2), .product-table td:nth-child(2) { width: 110px; } /* 售價 */
+.product-table th:nth-child(3), .product-table td:nth-child(3) { width: 180px; } /* 綁定原料 */
+.product-table th:nth-child(4), .product-table td:nth-child(4) { width: 120px; } /* 操作鈕區 */
 
 
 </style>
