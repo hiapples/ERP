@@ -464,7 +464,7 @@ const submitReport = async () => {
   }
 }
 
-// 報表總攬
+// 報表總覽
 const reportList = ref([])
 const isReportsLoading = ref(false)
 async function fetchReportsList () {
@@ -590,7 +590,7 @@ watch(currentPage4, async (p) => {
           </div>
 
           <table>
-            <thead><tr><th></th><th>品項</th><th>數量</th><th>整筆價格</th><th>備註</th><th v-if="!editingId">日期</th></tr></thead>
+            <thead><tr><th></th><th>品項</th><th>數量(g)</th><th>整筆價格</th><th>備註</th><th v-if="!editingId">日期</th></tr></thead>
             <tbody>
               <tr v-for="record in recordList" :key="record._id">
                 <td class="button">
@@ -832,7 +832,7 @@ watch(currentPage4, async (p) => {
           </div>
 
           <table>
-            <thead><tr><th></th><th>品項</th><th>數量</th><th>整筆價格</th><th>備註</th><th v-if="!editingId">日期</th></tr></thead>
+            <thead><tr><th></th><th>品項</th><th>數量(g)</th><th>整筆價格</th><th>備註</th><th v-if="!editingId">日期</th></tr></thead>
             <tbody>
               <tr v-for="record in recordList2Filtered" :key="record._id">
                 <td class="button">
@@ -946,7 +946,7 @@ watch(currentPage4, async (p) => {
         </div>
       </div>
 
-      <!-- 報表總攬 -->
+      <!-- 報表總覽 -->
       <div v-else-if="currentPage4 === 'two-2'">
         <div class="d-flex justify-content-center align-items-center">
           <button style="min-width:330px;" class="btn mb-3" :class="{ active: currentPage4 === 'one-1' }" @click="currentPage4 = 'one-1'">報表紀錄</button>
