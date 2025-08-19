@@ -1,78 +1,78 @@
-import express from 'express';
-import OutRecord from '../models/out.js';
+import { Router } from 'express'
+import OutRecord from '../models/OutRecord.js'
 
-const router = express.Router();
-const norm = v => (v == null ? '' : String(v).trim());
+const router = Router()
+const _arr = (v) => (Array.isArray(v) ? v : (Array.isArray(v?.items) ? v.items : []))
+const norm = (v) => (v == null ? '' : String(v).trim())
 
-// 查詢（date / item）
-router.get('/', async (req, res, next) => {
-  try {
-    const q = {};
-    if (norm(req.query.date)) q.date = norm(req.query.date);
-    if (norm(req.query.item)) q.item = norm(req.query.item);
-    const list = await OutRecord.find(q).sort({ date: -1, createdAt: -1 });
-    res.json(list);
-  } catch (e) { next(e); }
-});
+// 查詢出庫（僅用 date 過濾，以免舊資料被 item 過濾掉）
+router.get('/', async (req, res) => {
+  const q = {}
+  if (req.query.date) q.date = norm(req.query.date)
+  const list = await OutRecord.find(q).sort({ createdAt: -1 }).lean()
+  res.json(_arr(list))
+})
 
-// 新增
-router.post('/', async (req, res, next) => {
-  try {
-    const doc = {
-      item: norm(req.body.item),                  // 原料名
-      quantity: Number(req.body.quantity || 0),   // g
-      price: Number(req.body.price || 0),
-      note: norm(req.body.note || ''),
-      date: norm(req.body.date)
-    };
-    if (!doc.item || !doc.date) return res.status(400).json({ error: 'item/date required' });
-    const saved = await OutRecord.create(doc);
-    res.json(saved);
-  } catch (e) { next(e); }
-});
+// 新增出庫（直接扣原料）
+router.post('/', async (req, res) => {
+  const b = req.body || {}
+  const doc = await OutRecord.create({
+    item: norm(b.item),
+    quantity: Number(b.quantity || 0),
+    price: Number(b.price || 0),
+    note: norm(b.note || ''),
+    date: norm(b.date)
+  })
+  res.json(doc)
+})
 
 // 更新
-router.put('/:id', async (req, res, next) => {
-  try {
-    const body = {
-      item: norm(req.body.item),
-      quantity: Number(req.body.quantity || 0),
-      price: Number(req.body.price || 0),
-      note: norm(req.body.note || ''),
-      date: norm(req.body.date)
-    };
-    const updated = await OutRecord.findByIdAndUpdate(req.params.id, body, { new: true });
-    res.json(updated);
-  } catch (e) { next(e); }
-});
+router.put('/:id', async (req, res) => {
+  const b = req.body || {}
+  const doc = await OutRecord.findByIdAndUpdate(
+    req.params.id,
+    {
+      item: norm(b.item),
+      quantity: Number(b.quantity || 0),
+      price: Number(b.price || 0),
+      note: norm(b.note || ''),
+      date: norm(b.date)
+    },
+    { new: true }
+  )
+  res.json(doc)
+})
 
 // 刪除
-router.delete('/:id', async (req, res, next) => {
-  try {
-    await OutRecord.findByIdAndDelete(req.params.id);
-    res.json({ ok: true });
-  } catch (e) { next(e); }
-});
+router.delete('/:id', async (req, res) => {
+  await OutRecord.findByIdAndDelete(req.params.id)
+  res.json({ ok: true })
+})
 
-// （可選）回傳指定日期的原料成本總覽
-router.get('/total/:date', async (req, res, next) => {
-  try {
-    const date = norm(req.params.date);
-    const docs = await OutRecord.find({ date });
+/**
+ * 指定日的原料成本總表：依 item（原料名）分組，合計 price
+ * 回傳格式：
+ * {
+ *   byRaw: { "<原料名>": <合計成本> },
+ *   total: <所有原料成本總和>
+ * }
+ */
+router.get('/total/:date', async (req, res) => {
+  const date = norm(req.params.date)
+  const agg = await OutRecord.aggregate([
+    { $match: { date } },
+    { $group: { _id: '$item', amt: { $sum: '$price' } } }
+  ])
 
-    let total = 0;
-    const byRaw = {}; // key: 原料名, val: 成本加總
+  const byRaw = {}
+  let total = 0
+  for (const row of agg) {
+    const name = row?._id ?? ''
+    const val = Number(row?.amt || 0)
+    if (name) byRaw[name] = val
+    total += val
+  }
+  res.json({ byRaw, total })
+})
 
-    for (const d of docs) {
-      const price = Number(d.price || 0);
-      total += price;
-      const raw = norm(d.item);
-      if (!raw) continue;
-      byRaw[raw] = (byRaw[raw] || 0) + price;
-    }
-
-    res.json({ date, total, byRaw });
-  } catch (e) { next(e); }
-});
-
-export default router;
+export default router

@@ -1,55 +1,47 @@
-import express from 'express';
-import Report from '../models/report.js';
+import { Router } from 'express'
+import Report from '../models/Report.js'
 
-const router = express.Router();
-const norm = v => (v == null ? '' : String(v).trim());
+const router = Router()
+const norm = (v) => (v == null ? '' : String(v).trim())
 
-router.get('/', async (req, res, next) => {
-  try {
-    const list = await Report.find().sort({ date: -1 });
-    res.json(list);
-  } catch (e) { next(e); }
-});
+// 取得全部（排序新到舊）
+router.get('/', async (_req, res) => {
+  const list = await Report.find().sort({ date: -1 }).lean()
+  res.json(list)
+})
 
-router.get('/:date', async (req, res, next) => {
-  try {
-    const date = decodeURIComponent(req.params.date);
-    const doc = await Report.findOne({ date });
-    res.json(doc || null);
-  } catch (e) { next(e); }
-});
+// 取得某日
+router.get('/:date', async (req, res) => {
+  const date = norm(req.params.date)
+  const doc = await Report.findOne({ date }).lean()
+  res.json(doc || null)
+})
 
-router.post('/', async (req, res, next) => {
-  try {
-    const date = norm(req.body.date);
-    if (!date) return res.status(400).json({ error: 'date required' });
+// 新增/覆寫（以 date upsert）
+router.post('/', async (req, res) => {
+  const b = req.body || {}
+  const date = norm(b.date)
+  const payload = {
+    date,
+    items: Array.isArray(b.items) ? b.items.map(r => ({
+      item: norm(r.item),
+      qty: Number(r.qty || 0)
+    })) : [],
+    stallFee: Number(b.stallFee || 0),
+    parkingFee: Number(b.parkingFee || 0),
+    insuranceFee: Number(b.insuranceFee || 0),
+    netProfit: Number(b.netProfit || 0)
+  }
+  await Report.updateOne({ date }, { $set: payload }, { upsert: true })
+  const saved = await Report.findOne({ date }).lean()
+  res.json(saved)
+})
 
-    const payload = {
-      items: Array.isArray(req.body.items) ? req.body.items.map(x => ({
-        item: String(x.item || ''),
-        qty: Number(x.qty || 0)
-      })) : [],
-      stallFee: Number(req.body.stallFee || 0),
-      parkingFee: Number(req.body.parkingFee || 0),
-      insuranceFee: Number(req.body.insuranceFee || 0),
-      netProfit: Number(req.body.netProfit || 0)
-    };
+// 刪除某日
+router.delete('/:date', async (req, res) => {
+  const date = norm(req.params.date)
+  await Report.deleteOne({ date })
+  res.json({ ok: true })
+})
 
-    const updated = await Report.findOneAndUpdate(
-      { date },
-      payload,
-      { new: true, upsert: true, setDefaultsOnInsert: true }
-    );
-    res.json(updated);
-  } catch (e) { next(e); }
-});
-
-router.delete('/:date', async (req, res, next) => {
-  try {
-    const date = decodeURIComponent(req.params.date);
-    await Report.deleteOne({ date });
-  res.json({ ok: true });
-  } catch (e) { next(e); }
-});
-
-export default router;
+export default router

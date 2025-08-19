@@ -1,15 +1,14 @@
-import mongoose from 'mongoose';
-const { Schema } = mongoose;
+import mongoose from 'mongoose'
 
-// 出庫（以原料扣庫）
-const OutSchema = new Schema({
-  item: { type: String, required: true, trim: true }, // 原料名
-  quantity: { type: Number, required: true, min: 0 }, // g
-  price: { type: Number, required: true, min: 0 },    // 原料成本 = 當時平均單價 × 扣量
-  note: { type: String, default: '' },
-  date: { type: String, required: true }              // YYYY-MM-DD
-}, { timestamps: true });
+const OutRecordSchema = new mongoose.Schema(
+  {
+    item: { type: String, required: true },        // 原料名稱（不綁定成品，直接原料）
+    quantity: { type: Number, required: true },    // g
+    price: { type: Number, required: true },       // 整筆成本（平均單價 × g）
+    note: { type: String, default: '' },
+    date: { type: String, required: true }         // YYYY-MM-DD
+  },
+  { timestamps: true, collection: 'outrecords' }
+)
 
-OutSchema.index({ date: 1, item: 1 });
-
-export default mongoose.model('OutRecord', OutSchema);
+export default mongoose.model('OutRecord', OutRecordSchema)

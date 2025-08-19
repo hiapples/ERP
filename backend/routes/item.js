@@ -1,47 +1,46 @@
-import express from 'express';
-import Item from '../models/item.js';
+import { Router } from 'express'
+import Item from '../models/Item.js'
 
-const router = express.Router();
-const norm = v => (v == null ? '' : String(v).trim());
+const router = Router()
+const norm = (v) => (v == null ? '' : String(v).trim())
 
-router.get('/', async (req, res, next) => {
-  try {
-    const list = await Item.find().sort({ type: 1, name: 1 });
-    res.json(list);
-  } catch (e) { next(e); }
-});
+// 取得全部品項
+router.get('/', async (_req, res) => {
+  const items = await Item.find().sort({ type: 1, name: 1 }).lean()
+  res.json(items)
+})
 
-router.post('/', async (req, res, next) => {
-  try {
-    const body = {
-      name: norm(req.body.name),
-      type: req.body.type || 'product', // 'raw' or 'product'
-      salePrice: Number(req.body.salePrice || 0),
-      consumableCost: Number(req.body.consumableCost || 0)
-    };
-    if (!body.name || !body.type) return res.status(400).json({ error: 'name/type required' });
-    const saved = await Item.create(body);
-    res.json(saved);
-  } catch (e) { next(e); }
-});
+// 新增品項（raw 或 product）
+router.post('/', async (req, res) => {
+  const body = req.body || {}
+  const doc = await Item.create({
+    name: norm(body.name),
+    salePrice: Number(body.salePrice || 0),
+    type: body.type === 'raw' ? 'raw' : 'product',
+    consumableCost: Number(body.consumableCost || 0)
+  })
+  res.json(doc)
+})
 
-router.put('/:id', async (req, res, next) => {
-  try {
-    const body = {
-      name: norm(req.body.name),
-      salePrice: Number(req.body.salePrice || 0),
-      consumableCost: Number(req.body.consumableCost || 0)
-    };
-    const updated = await Item.findByIdAndUpdate(req.params.id, body, { new: true });
-    res.json(updated);
-  } catch (e) { next(e); }
-});
+// 更新品項
+router.put('/:id', async (req, res) => {
+  const body = req.body || {}
+  const doc = await Item.findByIdAndUpdate(
+    req.params.id,
+    {
+      name: norm(body.name),
+      salePrice: Number(body.salePrice || 0),
+      consumableCost: Number(body.consumableCost || 0)
+    },
+    { new: true }
+  )
+  res.json(doc)
+})
 
-router.delete('/:id', async (req, res, next) => {
-  try {
-    await Item.findByIdAndDelete(req.params.id);
-    res.json({ ok: true });
-  } catch (e) { next(e); }
-});
+// 刪除品項
+router.delete('/:id', async (req, res) => {
+  await Item.findByIdAndDelete(req.params.id)
+  res.json({ ok: true })
+})
 
-export default router;
+export default router

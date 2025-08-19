@@ -1,53 +1,53 @@
-import express from 'express';
-import Record from '../models/in.js';
+import { Router } from 'express'
+import InRecord from '../models/InRecord.js'
 
-const router = express.Router();
-const norm = v => (v == null ? '' : String(v).trim());
+const router = Router()
+const _arr = (v) => (Array.isArray(v) ? v : (Array.isArray(v?.items) ? v.items : []))
+const norm = (v) => (v == null ? '' : String(v).trim())
 
-router.get('/', async (req, res, next) => {
-  try {
-    const q = {};
-    if (norm(req.query.date)) q.date = norm(req.query.date);
-    if (norm(req.query.item)) q.item = norm(req.query.item);
-    const list = await Record.find(q).sort({ date: -1, createdAt: -1 });
-    res.json(list);
-  } catch (e) { next(e); }
-});
+// 查詢入庫
+router.get('/', async (req, res) => {
+  const q = {}
+  if (req.query.date) q.date = norm(req.query.date)
+  if (req.query.item) q.item = norm(req.query.item)
+  const list = await InRecord.find(q).sort({ createdAt: -1 }).lean()
+  res.json(_arr(list))
+})
 
-router.post('/', async (req, res, next) => {
-  try {
-    const doc = {
-      item: norm(req.body.item),
-      quantity: Number(req.body.quantity || 0),
-      price: Number(req.body.price || 0),
-      note: norm(req.body.note || ''),
-      date: norm(req.body.date)
-    };
-    if (!doc.item || !doc.date) return res.status(400).json({ error: 'item/date required' });
-    const saved = await Record.create(doc);
-    res.json(saved);
-  } catch (e) { next(e); }
-});
+// 新增入庫
+router.post('/', async (req, res) => {
+  const b = req.body || {}
+  const doc = await InRecord.create({
+    item: norm(b.item),
+    quantity: Number(b.quantity || 0),
+    price: Number(b.price || 0),
+    note: norm(b.note || ''),
+    date: norm(b.date)
+  })
+  res.json(doc)
+})
 
-router.put('/:id', async (req, res, next) => {
-  try {
-    const body = {
-      item: norm(req.body.item),
-      quantity: Number(req.body.quantity || 0),
-      price: Number(req.body.price || 0),
-      note: norm(req.body.note || ''),
-      date: norm(req.body.date)
-    };
-    const updated = await Record.findByIdAndUpdate(req.params.id, body, { new: true });
-    res.json(updated);
-  } catch (e) { next(e); }
-});
+// 更新
+router.put('/:id', async (req, res) => {
+  const b = req.body || {}
+  const doc = await InRecord.findByIdAndUpdate(
+    req.params.id,
+    {
+      item: norm(b.item),
+      quantity: Number(b.quantity || 0),
+      price: Number(b.price || 0),
+      note: norm(b.note || ''),
+      date: norm(b.date)
+    },
+    { new: true }
+  )
+  res.json(doc)
+})
 
-router.delete('/:id', async (req, res, next) => {
-  try {
-    await Record.findByIdAndDelete(req.params.id);
-    res.json({ ok: true });
-  } catch (e) { next(e); }
-});
+// 刪除
+router.delete('/:id', async (req, res) => {
+  await InRecord.findByIdAndDelete(req.params.id)
+  res.json({ ok: true })
+})
 
-export default router;
+export default router

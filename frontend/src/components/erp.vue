@@ -352,7 +352,7 @@ const deleteItem = async (id) => {
   }
 }
 
-// === 報表（成品售價×份數；成品「銷貨成本」不必顯示；另外列出原料成本明細） ===
+// === 報表（單表：品項=成品+原料；成品成本空，原料顯示成本） ===
 const reportRawCosts = ref({})   // { [rawName]: cost }
 const reportQty = ref({})        // { [productName]: qty }
 
@@ -392,7 +392,7 @@ function applyReportToForm(r) {
   }
   reportQty.value = map
 
-  // 三費用（若舊資料有 fixedExpense/extraExpense，做映射）
+  // 三費用
   stallFee.value     = Number((r?.stallFee ?? r?.fixedExpense ?? 0) || 0)
   parkingFee.value   = Number((r?.parkingFee ?? 0) || 0)
   insuranceFee.value = Number((r?.insuranceFee ?? r?.extraExpense ?? 0) || 0)
@@ -426,14 +426,30 @@ watch(items, () => {
   reportQty.value = map
 }, { deep: true })
 
-// 單列顯示：營業收入（預設空值）
+// 報表表格資料（合併：成品 + 原料）
+const reportTableItems = computed(() => {
+  const prods = productItems.value.map(p => ({ ...p, _kind: 'product' }))
+  const raws  = rawItems.value.map(r => ({ ...r, _kind: 'raw' }))
+  return [...prods, ...raws]
+})
+
+const isProduct = (it) => it?._kind === 'product'
+const isRaw = (it) => it?._kind === 'raw'
+
+// 單列顯示：營業收入（只有成品）
 const perProductRevenue = (it) => {
   const q = Number(reportQty.value[it.name] || 0)
-  if (!q) return '' // 顯示空值
+  if (!q) return ''
   return (q * Number(it.salePrice || 0)).toFixed(0)
 }
 
-// 報表合計（收入 & 成本）
+// 原料單列成本
+const rawRowCost = (rawName) => {
+  const v = reportRawCosts.value?.[rawName]
+  return v == null ? '' : Number(v).toFixed(2)
+}
+
+// 合計（收入 & 成本）
 const revenueTotal = computed(() => {
   let sum = 0
   for (const it of productItems.value) {
@@ -454,7 +470,7 @@ const extraConsumableTotal = computed(() =>
     s + Number(reportQty.value[it.name] || 0) * Number(consumableMap.value[it.name] || 0), 0)
 )
 
-// 總成本 = 原料成本總額 + Σ(成品份數 × 耗材成本)
+// 總成本 = 原料成本合計 + Σ(成品份數 × 耗材成本)
 const costTotal = computed(() => baseRawCostTotal.value + extraConsumableTotal.value)
 
 const netProfit = computed(() =>
@@ -465,7 +481,7 @@ const netProfit = computed(() =>
   - Number(insuranceFee.value || 0)
 )
 
-// 送出報表（份數可為 0；不需要成品銷貨成本）
+// 送出報表（只送成品份數；原料不需輸入）
 const submitReport = async () => {
   if (!selectedDate5.value) { alert('❌ 請先選擇報表日期'); return }
 
@@ -938,18 +954,33 @@ watch(currentPage4, async (p) => {
             </div>
           </div>
 
-          <!-- 成品區（份數 × 售價；銷貨成本留空） -->
+          <!-- 單表：品項（成品 + 原料） -->
           <table class="text-center align-middle">
-            <thead><tr><th>成品</th><th>份數 × 售價</th><th>營業收入</th><th>銷貨成本</th></tr></thead>
+            <thead><tr><th>品項</th><th>份數 × 售價</th><th>營業收入</th><th>銷貨成本</th></tr></thead>
             <tbody>
-              <tr v-for="it in productItems" :key="it._id">
+              <tr v-for="it in reportTableItems" :key="it._id + (it._kind || '')">
                 <td>{{ it.name }}</td>
+
+                <!-- 份數 × 售價：只有成品可以填 -->
                 <td class="d-flex justify-content-center align-items-center gap-2">
-                  <input v-model.number="reportQty[it.name]" type="number" min="0" step="1" class="form-control text-center report" style="display:inline-block;" />
-                  <span>× {{ Number(it.salePrice || 0).toFixed(0) }}</span>
+                  <template v-if="isProduct(it)">
+                    <input v-model.number="reportQty[it.name]" type="number" min="0" step="1" class="form-control text-center report" style="display:inline-block;" />
+                    <span>× {{ Number(it.salePrice || 0).toFixed(0) }}</span>
+                  </template>
+                  <template v-else>—</template>
                 </td>
-                <td>{{ perProductRevenue(it) }}</td>
-                <td><!-- 成品成本留空 --></td>
+
+                <!-- 營業收入：只有成品 -->
+                <td>
+                  <template v-if="isProduct(it)">{{ perProductRevenue(it) }}</template>
+                  <template v-else></template>
+                </td>
+
+                <!-- 銷貨成本：原料顯示成本；成品留空 -->
+                <td>
+                  <template v-if="isRaw(it)">{{ rawRowCost(it.name) }}</template>
+                  <template v-else></template>
+                </td>
               </tr>
 
               <tr><td>&ensp;</td><td>&ensp;</td><td>&ensp;</td><td>&ensp;</td></tr>
@@ -962,29 +993,6 @@ watch(currentPage4, async (p) => {
               </tr>
             </tbody>
           </table>
-
-          <!-- 原料成本明細（由出庫合計） -->
-          <div class="text-start mt-3" style="font-size:14px;">
-            <div class="fw-bold mb-1">原料成本明細</div>
-            <table class="table">
-              <thead><tr><th>原料</th><th>成本</th></tr></thead>
-              <tbody>
-                <tr v-if="Object.keys(reportRawCosts).length === 0"><td colspan="2" style="color:#888;">（該日目前無原料成本資料）</td></tr>
-                <tr v-for="(cost, raw) in reportRawCosts" :key="raw">
-                  <td>{{ raw }}</td>
-                  <td>{{ Number(cost).toFixed(2) }}</td>
-                </tr>
-                <tr class="total-row">
-                  <td>原料成本合計</td>
-                  <td>{{ baseRawCostTotal.toFixed(2) }}</td>
-                </tr>
-                <tr>
-                  <td>耗材合計</td>
-                  <td>{{ extraConsumableTotal.toFixed(2) }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
 
           <div class="d-flex justify-content-center align-items-center gap-3 mt-3">
             <div style="font-size: 14px;">攤販費：</div>
