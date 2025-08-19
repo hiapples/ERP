@@ -577,11 +577,7 @@ const submitReport = async () => {
     return
   }
 
-  // 4) 若總成本=0 且總份數<=0，不可送出
-  if (Number(costTotal.value || 0) === 0 && Number(totalProductQty.value || 0) <= 0) {
-    alert('❌ 銷貨成本為 0，份數必須大於 0 才能送出')
-    return
-  }
+
 
   const payload = {
     date: selectedDate5.value,
