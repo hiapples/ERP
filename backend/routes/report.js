@@ -1,4 +1,3 @@
-// backend/routes/report.js
 import express from 'express'
 import Report from '../models/report.js'
 
