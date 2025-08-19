@@ -825,7 +825,7 @@ watch(currentPage4, async (p) => {
         </div>
 
         <div class="form-wrapper">
-          <h5 class="title">商品出庫（扣原料）</h5>
+          <h5 class="title">商品出庫</h5>
           <div class="d-flex justify-content-center mt-3">
             <div class="d-flex align-items-center gap-3 mb-3" style="width:100%;max-width:330px;">
               <div style="font-size:14px;white-space:nowrap;">日期&ensp;:</div>
