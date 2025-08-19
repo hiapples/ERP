@@ -1055,15 +1055,15 @@ watch(currentPage4, async (p) => {
           </table>
 
           <div class="d-flex justify-content-center align-items-center gap-3 mt-3">
-            <label>攤販費：</label>
+            <div>攤販費：</div>
             <input v-model.number="stallFee" type="number" min="0" step="1" class="form-control text-center report2" />
           </div>
           <div class="d-flex justify-content-center align-items-center gap-3 mt-2">
-            <label>停車費：</label>
+            <div>停車費：</div>
             <input v-model.number="parkingFee" type="number" min="0" step="1" class="form-control text-center report2" />
           </div>
           <div class="d-flex justify-content-center align-items-center gap-3 mt-2">
-            <label>保險費：</label>
+            <div>保險費：</div>
             <input v-model.number="insuranceFee" type="number" min="0" step="1" class="form-control text-center report2" />
           </div>
 
