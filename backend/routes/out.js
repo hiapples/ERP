@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const OutRecord = require('../models/out');
+const OutRecord = require('../models/out.js');
 
 const norm = v => (v == null ? '' : String(v).trim());
 

@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const Report = require('../models/report');
+const Report = require('../models/report.js');
 
 const norm = v => (v == null ? '' : String(v).trim());
 

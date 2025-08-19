@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const Record = require('../models/in');
+const Record = require('../models/in.js');
 
 const norm = v => (v == null ? '' : String(v).trim());
 

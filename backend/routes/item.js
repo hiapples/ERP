@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const Item = require('../models/item');
+const Item = require('../models/item.js');
 
 const norm = v => (v == null ? '' : String(v).trim());
 
