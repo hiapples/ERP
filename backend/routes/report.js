@@ -18,10 +18,10 @@ router.get('/:date', async (req, res) => {
   res.json(r)
 })
 
-// 建立/覆蓋某日報表
+// 建立/覆蓋某日報表（新欄位：stallFee/parkingFee/insuranceFee）
 router.post('/', async (req, res) => {
   try {
-    const { date, items = [], fixedExpense = 0, extraExpense = 0, netProfit = 0 } = req.body
+    const { date, items = [], stallFee = 0, parkingFee = 0, insuranceFee = 0, netProfit = 0 } = req.body
     if (!date) return res.status(400).json({ error: '缺少日期' })
 
     const doc = await Report.findOneAndUpdate(
@@ -29,8 +29,9 @@ router.post('/', async (req, res) => {
       {
         date,
         items,
-        fixedExpense: Number(fixedExpense || 0),
-        extraExpense: Number(extraExpense || 0),
+        stallFee: Number(stallFee || 0),
+        parkingFee: Number(parkingFee || 0),
+        insuranceFee: Number(insuranceFee || 0),
         netProfit: Number(netProfit || 0)
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
