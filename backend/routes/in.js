@@ -1,7 +1,6 @@
 import express from 'express'
 import InRecord from '../models/in.js'
 import Item from '../models/item.js'
-
 const router = express.Router()
 const norm = (v) => (v == null ? '' : String(v).trim())
 
