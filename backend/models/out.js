@@ -5,7 +5,7 @@ const { Schema } = mongoose;
 const OutSchema = new Schema({
   item: { type: String, required: true, trim: true }, // 原料名
   quantity: { type: Number, required: true, min: 0 }, // g
-  price: { type: Number, required: true, min: 0 },    // 成本 = 平均單價 × 扣除量
+  price: { type: Number, required: true, min: 0 },    // 原料成本 = 當時平均單價 × 扣量
   note: { type: String, default: '' },
   date: { type: String, required: true }              // YYYY-MM-DD
 }, { timestamps: true });

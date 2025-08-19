@@ -15,7 +15,7 @@ router.get('/:date', async (req, res, next) => {
   try {
     const date = decodeURIComponent(req.params.date);
     const doc = await Report.findOne({ date });
-    res.json(doc || null); // 沒資料回 null
+    res.json(doc || null);
   } catch (e) { next(e); }
 });
 
@@ -48,7 +48,7 @@ router.delete('/:date', async (req, res, next) => {
   try {
     const date = decodeURIComponent(req.params.date);
     await Report.deleteOne({ date });
-    res.json({ ok: true });
+  res.json({ ok: true });
   } catch (e) { next(e); }
 });
 

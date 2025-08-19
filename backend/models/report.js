@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 const { Schema } = mongoose;
 
-// 每日報表（只存成品份數與三費用；成本由原料出庫加總）
+// 每日報表（只存成品份數與三費用；成本由原料出庫加總 + 份數×耗材(前端算或自取)）
 const ReportSchema = new Schema({
   date: { type: String, required: true, unique: true }, // YYYY-MM-DD
   items: [{

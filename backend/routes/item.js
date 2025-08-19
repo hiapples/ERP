@@ -16,7 +16,8 @@ router.post('/', async (req, res, next) => {
     const body = {
       name: norm(req.body.name),
       type: req.body.type || 'product', // 'raw' or 'product'
-      salePrice: Number(req.body.salePrice || 0)
+      salePrice: Number(req.body.salePrice || 0),
+      consumableCost: Number(req.body.consumableCost || 0)
     };
     if (!body.name || !body.type) return res.status(400).json({ error: 'name/type required' });
     const saved = await Item.create(body);
@@ -28,7 +29,8 @@ router.put('/:id', async (req, res, next) => {
   try {
     const body = {
       name: norm(req.body.name),
-      salePrice: Number(req.body.salePrice || 0)
+      salePrice: Number(req.body.salePrice || 0),
+      consumableCost: Number(req.body.consumableCost || 0)
     };
     const updated = await Item.findByIdAndUpdate(req.params.id, body, { new: true });
     res.json(updated);

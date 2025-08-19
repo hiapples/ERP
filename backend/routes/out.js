@@ -4,7 +4,7 @@ import OutRecord from '../models/out.js';
 const router = express.Router();
 const norm = v => (v == null ? '' : String(v).trim());
 
-// 取得（可用 date / item 過濾）
+// 查詢（date / item）
 router.get('/', async (req, res, next) => {
   try {
     const q = {};
@@ -54,14 +54,14 @@ router.delete('/:id', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// （可選）報表用：回傳指定日期的原料總成本與逐原料成本
+// （可選）回傳指定日期的原料成本總覽
 router.get('/total/:date', async (req, res, next) => {
   try {
     const date = norm(req.params.date);
     const docs = await OutRecord.find({ date });
 
     let total = 0;
-    const byRaw = {}; // key: 原料名, val: 成本(加總)
+    const byRaw = {}; // key: 原料名, val: 成本加總
 
     for (const d of docs) {
       const price = Number(d.price || 0);
