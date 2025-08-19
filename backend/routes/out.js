@@ -1,7 +1,7 @@
-const express = require('express');
-const router = express.Router();
-const OutRecord = require('../models/out.js');
+import express from 'express';
+import OutRecord from '../models/out.js';
 
+const router = express.Router();
 const norm = v => (v == null ? '' : String(v).trim());
 
 // 取得（可用 date / item 過濾）
@@ -75,4 +75,4 @@ router.get('/total/:date', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-module.exports = router;
+export default router;

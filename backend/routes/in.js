@@ -1,7 +1,7 @@
-const express = require('express');
-const router = express.Router();
-const Record = require('../models/in.js');
+import express from 'express';
+import Record from '../models/in.js';
 
+const router = express.Router();
 const norm = v => (v == null ? '' : String(v).trim());
 
 router.get('/', async (req, res, next) => {
@@ -50,4 +50,5 @@ router.delete('/:id', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-module.exports = router;
+export default router;
+ 

@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 const { Schema } = mongoose;
 
 // 每日報表（只存成品份數與三費用；成本由原料出庫加總）
@@ -16,4 +16,4 @@ const ReportSchema = new Schema({
 
 ReportSchema.index({ date: 1 });
 
-module.exports = mongoose.model('Report', ReportSchema);
+export default mongoose.model('Report', ReportSchema);

@@ -1,7 +1,7 @@
-const express = require('express');
-const router = express.Router();
-const Report = require('../models/report.js');
+import express from 'express';
+import Report from '../models/report.js';
 
+const router = express.Router();
 const norm = v => (v == null ? '' : String(v).trim());
 
 router.get('/', async (req, res, next) => {
@@ -15,7 +15,7 @@ router.get('/:date', async (req, res, next) => {
   try {
     const date = decodeURIComponent(req.params.date);
     const doc = await Report.findOne({ date });
-    res.json(doc || null); // 前端期望沒資料回 null
+    res.json(doc || null); // 沒資料回 null
   } catch (e) { next(e); }
 });
 
@@ -52,4 +52,4 @@ router.delete('/:date', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-module.exports = router;
+export default router;

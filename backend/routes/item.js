@@ -1,7 +1,7 @@
-const express = require('express');
-const router = express.Router();
-const Item = require('../models/item.js');
+import express from 'express';
+import Item from '../models/item.js';
 
+const router = express.Router();
 const norm = v => (v == null ? '' : String(v).trim());
 
 router.get('/', async (req, res, next) => {
@@ -15,7 +15,7 @@ router.post('/', async (req, res, next) => {
   try {
     const body = {
       name: norm(req.body.name),
-      type: req.body.type || 'product', // 前端會帶 'raw' 或 'product'
+      type: req.body.type || 'product', // 'raw' or 'product'
       salePrice: Number(req.body.salePrice || 0)
     };
     if (!body.name || !body.type) return res.status(400).json({ error: 'name/type required' });
@@ -42,4 +42,4 @@ router.delete('/:id', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-module.exports = router;
+export default router;

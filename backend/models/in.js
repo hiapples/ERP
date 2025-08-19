@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 const { Schema } = mongoose;
 
 // 入庫（原料進貨）
@@ -12,4 +12,4 @@ const InSchema = new Schema({
 
 InSchema.index({ date: 1, item: 1 });
 
-module.exports = mongoose.model('Record', InSchema);
+export default mongoose.model('Record', InSchema);
