@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import Report from '../models/Report.js'
+import Report from '../models/report.js'
 
 const router = Router()
 const norm = (v) => (v == null ? '' : String(v).trim())

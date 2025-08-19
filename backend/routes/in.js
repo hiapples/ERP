@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import InRecord from '../models/InRecord.js'
+import InRecord from '../models/in.js'
 
 const router = Router()
 const _arr = (v) => (Array.isArray(v) ? v : (Array.isArray(v?.items) ? v.items : []))
