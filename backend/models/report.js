@@ -1,18 +1,19 @@
-// backend/models/report.js
-import mongoose from 'mongoose'
+const mongoose = require('mongoose');
+const { Schema } = mongoose;
 
-const ReportItemSchema = new mongoose.Schema({
-  item: { type: String, required: true },
-  qty:  { type: Number, required: true, default: 0 }
-}, { _id: false })
+// 每日報表（只存成品份數與三費用；成本由原料出庫加總）
+const ReportSchema = new Schema({
+  date: { type: String, required: true, unique: true }, // YYYY-MM-DD
+  items: [{
+    item: { type: String, required: true }, // 成品名
+    qty: { type: Number, required: true, min: 0 }
+  }],
+  stallFee: { type: Number, default: 0 },
+  parkingFee: { type: Number, default: 0 },
+  insuranceFee: { type: Number, default: 0 },
+  netProfit: { type: Number, default: 0 }
+}, { timestamps: true });
 
-const ReportSchema = new mongoose.Schema({
-  date:          { type: String, required: true, index: true, unique: true },
-  items:         { type: [ReportItemSchema], default: [] },
-  stallFee:      { type: Number, default: 0 }, // 攤販費
-  parkingFee:    { type: Number, default: 0 }, // 停車費
-  insuranceFee:  { type: Number, default: 0 }, // 保險費
-  netProfit:     { type: Number, default: 0 }
-}, { timestamps: true })
+ReportSchema.index({ date: 1 });
 
-export default mongoose.model('Report', ReportSchema)
+module.exports = mongoose.model('Report', ReportSchema);

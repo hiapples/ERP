@@ -1,52 +1,55 @@
-// backend/routes/report.js
-import express from 'express'
-import Report from '../models/report.js'
+const express = require('express');
+const router = express.Router();
+const Report = require('../models/report');
 
-const router = express.Router()
+const norm = v => (v == null ? '' : String(v).trim());
 
-// 全部（簡表）
-router.get('/', async (_req, res) => {
-  const list = await Report.find().sort({ date: -1 })
-  res.json(list)
-})
-
-// 取某日
-router.get('/:date', async (req, res) => {
-  const { date } = req.params
-  const r = await Report.findOne({ date })
-  if (!r) return res.json(null)
-  res.json(r)
-})
-
-// 建立/覆蓋某日報表（新欄位：stallFee/parkingFee/insuranceFee）
-router.post('/', async (req, res) => {
+router.get('/', async (req, res, next) => {
   try {
-    const { date, items = [], stallFee = 0, parkingFee = 0, insuranceFee = 0, netProfit = 0 } = req.body
-    if (!date) return res.status(400).json({ error: '缺少日期' })
+    const list = await Report.find().sort({ date: -1 });
+    res.json(list);
+  } catch (e) { next(e); }
+});
 
-    const doc = await Report.findOneAndUpdate(
+router.get('/:date', async (req, res, next) => {
+  try {
+    const date = decodeURIComponent(req.params.date);
+    const doc = await Report.findOne({ date });
+    res.json(doc || null); // 前端期望沒資料回 null
+  } catch (e) { next(e); }
+});
+
+router.post('/', async (req, res, next) => {
+  try {
+    const date = norm(req.body.date);
+    if (!date) return res.status(400).json({ error: 'date required' });
+
+    const payload = {
+      items: Array.isArray(req.body.items) ? req.body.items.map(x => ({
+        item: String(x.item || ''),
+        qty: Number(x.qty || 0)
+      })) : [],
+      stallFee: Number(req.body.stallFee || 0),
+      parkingFee: Number(req.body.parkingFee || 0),
+      insuranceFee: Number(req.body.insuranceFee || 0),
+      netProfit: Number(req.body.netProfit || 0)
+    };
+
+    const updated = await Report.findOneAndUpdate(
       { date },
-      {
-        date,
-        items,
-        stallFee: Number(stallFee || 0),
-        parkingFee: Number(parkingFee || 0),
-        insuranceFee: Number(insuranceFee || 0),
-        netProfit: Number(netProfit || 0)
-      },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    )
-    res.json(doc)
-  } catch (e) {
-    res.status(500).json({ error: e.message || '儲存報表失敗' })
-  }
-})
+      payload,
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+    res.json(updated);
+  } catch (e) { next(e); }
+});
 
-// 刪某日
-router.delete('/:date', async (req, res) => {
-  const { date } = req.params
-  await Report.deleteOne({ date })
-  res.json({ ok: true })
-})
+router.delete('/:date', async (req, res, next) => {
+  try {
+    const date = decodeURIComponent(req.params.date);
+    await Report.deleteOne({ date });
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
 
-export default router
+module.exports = router;

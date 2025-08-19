@@ -1,56 +1,53 @@
-import express from 'express'
-import InRecord from '../models/in.js'
-import Item from '../models/item.js'
-const router = express.Router()
-const norm = (v) => (v == null ? '' : String(v).trim())
+const express = require('express');
+const router = express.Router();
+const Record = require('../models/in');
 
-router.get('/', async (req, res) => {
-  const { date, item } = req.query
-  const q = {}
-  if (date) q.date = String(date)
-  if (item) q.item = norm(item)
-  res.json(await InRecord.find(q).sort({ createdAt: -1 }))
-})
+const norm = v => (v == null ? '' : String(v).trim());
 
-router.post('/', async (req, res) => {
-  const { item, quantity, price, note = '', date } = req.body || {}
-  const name = norm(item)
-  const found = await Item.findOne({ name })
-  if (!found) return res.status(400).json({ error: '品項不存在' })
-  if (found.type !== 'raw') return res.status(400).json({ error: '只能入庫原料' })
-  res.json(await InRecord.create({
-    item: name,
-    quantity: Number(quantity),
-    price: Number(price),
-    note: String(note || ''),
-    date: String(date)
-  }))
-})
+router.get('/', async (req, res, next) => {
+  try {
+    const q = {};
+    if (norm(req.query.date)) q.date = norm(req.query.date);
+    if (norm(req.query.item)) q.item = norm(req.query.item);
+    const list = await Record.find(q).sort({ date: -1, createdAt: -1 });
+    res.json(list);
+  } catch (e) { next(e); }
+});
 
-router.put('/:id', async (req, res) => {
-  const b = req.body || {}
-  if (b.item) {
-    const found = await Item.findOne({ name: norm(b.item) })
-    if (!found) return res.status(400).json({ error: '品項不存在' })
-    if (found.type !== 'raw') return res.status(400).json({ error: '入庫僅能是原料' })
-  }
-  res.json(await InRecord.findByIdAndUpdate(
-    req.params.id,
-    {
-      ...(b.item !== undefined ? { item: norm(b.item) } : {}),
-      ...(b.quantity !== undefined ? { quantity: Number(b.quantity) } : {}),
-      ...(b.price !== undefined ? { price: Number(b.price) } : {}),
-      ...(b.note !== undefined ? { note: String(b.note || '') } : {}),
-      ...(b.date !== undefined ? { date: String(b.date || '') } : {})
-    },
-    { new: true }
-  ))
-})
+router.post('/', async (req, res, next) => {
+  try {
+    const doc = {
+      item: norm(req.body.item),
+      quantity: Number(req.body.quantity || 0),
+      price: Number(req.body.price || 0),
+      note: norm(req.body.note || ''),
+      date: norm(req.body.date)
+    };
+    if (!doc.item || !doc.date) return res.status(400).json({ error: 'item/date required' });
+    const saved = await Record.create(doc);
+    res.json(saved);
+  } catch (e) { next(e); }
+});
 
-router.delete('/:id', async (req, res) => {
-  const r = await InRecord.findByIdAndDelete(req.params.id)
-  if (!r) return res.status(404).json({ error: 'not found' })
-  res.json({ ok: true })
-})
+router.put('/:id', async (req, res, next) => {
+  try {
+    const body = {
+      item: norm(req.body.item),
+      quantity: Number(req.body.quantity || 0),
+      price: Number(req.body.price || 0),
+      note: norm(req.body.note || ''),
+      date: norm(req.body.date)
+    };
+    const updated = await Record.findByIdAndUpdate(req.params.id, body, { new: true });
+    res.json(updated);
+  } catch (e) { next(e); }
+});
 
-export default router
+router.delete('/:id', async (req, res, next) => {
+  try {
+    await Record.findByIdAndDelete(req.params.id);
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
+module.exports = router;

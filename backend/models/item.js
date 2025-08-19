@@ -1,18 +1,13 @@
-// backend/models/item.js
-import mongoose from 'mongoose';
+const mongoose = require('mongoose');
+const { Schema } = mongoose;
 
-const ItemSchema = new mongoose.Schema(
-  {
-    name: { type: String, required: true, trim: true },
-    type: { type: String, enum: ['raw', 'product'], required: true },
-    salePrice: { type: Number, default: 0 },
-    bindRaw: { type: String, default: '' },
-    // ★ 新增：成品每一份的耗材成本（報表會用 份數 × 此單價 加總到「銷貨成本」）
-    consumableCost: { type: Number, default: 0 }
-  },
-  { timestamps: true }
-);
+// 品項：原料 or 成品（只有名稱、售價；無綁定、無耗材）
+const ItemSchema = new Schema({
+  name: { type: String, required: true, trim: true },
+  type: { type: String, enum: ['raw', 'product'], required: true },
+  salePrice: { type: Number, default: 0 }
+}, { timestamps: true });
 
-const Item = mongoose.model('Item', ItemSchema);
-export default Item;
-export { Item };
+ItemSchema.index({ type: 1, name: 1 });
+
+module.exports = mongoose.model('Item', ItemSchema);

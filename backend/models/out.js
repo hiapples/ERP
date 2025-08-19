@@ -1,17 +1,15 @@
-// backend/models/out.js
-import mongoose from 'mongoose'
+const mongoose = require('mongoose');
+const { Schema } = mongoose;
 
-const OutRecordSchema = new mongoose.Schema(
-  {
-    // 可能是「原料名」（新制）或「成品名」（舊資料）
-    item: { type: String, required: true, trim: true },
-    quantity: { type: Number, required: true, min: 0 },
-    price: { type: Number, required: true, min: 0 }, // 整筆金額
-    note: { type: String, default: '' },
-    date: { type: String, required: true }           // YYYY-MM-DD
-  },
-  { timestamps: true }
-)
+// 出庫（以原料扣庫）
+const OutSchema = new Schema({
+  item: { type: String, required: true, trim: true }, // 原料名
+  quantity: { type: Number, required: true, min: 0 }, // 扣除量(g)
+  price: { type: Number, required: true, min: 0 },    // 此筆原料成本 = 平均單價 × 扣除量
+  note: { type: String, default: '' },
+  date: { type: String, required: true }              // YYYY-MM-DD
+}, { timestamps: true });
 
-export default mongoose.model('OutRecord', OutRecordSchema)
-export { OutRecordSchema }
+OutSchema.index({ date: 1, item: 1 });
+
+module.exports = mongoose.model('OutRecord', OutSchema);
