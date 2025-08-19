@@ -107,7 +107,7 @@ const fetchRecords3 = async () => {
   } catch (err) {
     alert('❌ 取得庫存資料失敗：' + err.message)
   } finally {
-    isLoading.value = false
+       isLoading.value = false
   }
 }
 
@@ -352,7 +352,7 @@ const deleteItem = async (id) => {
   }
 }
 
-// === 報表（單表：品項=成品+原料；成品成本空，原料顯示成本） ===
+// === 報表（單表：品項=成品+原料；成品成本顯示「份數×耗材」，原料顯示當日原料成本） ===
 const reportRawCosts = ref({})   // { [rawName]: cost }
 const reportQty = ref({})        // { [productName]: qty }
 
@@ -443,7 +443,15 @@ const perProductRevenue = (it) => {
   return (q * Number(it.salePrice || 0)).toFixed(0)
 }
 
-// 原料單列成本
+// 成品單列「耗材」成本 = 份數 × 耗材（要顯示在銷貨成本欄位）
+const productRowCost = (it) => {
+  const qty = Number(reportQty.value[it.name] || 0)
+  if (!qty) return ''
+  const extra = qty * Number(consumableMap.value[it.name] || 0)
+  return extra.toFixed(2)
+}
+
+// 原料單列成本（由後端彙總）
 const rawRowCost = (rawName) => {
   const v = reportRawCosts.value?.[rawName]
   return v == null ? '' : Number(v).toFixed(2)
@@ -967,7 +975,7 @@ watch(currentPage4, async (p) => {
                     <input v-model.number="reportQty[it.name]" type="number" min="0" step="1" class="form-control text-center report" style="display:inline-block;" />
                     <span>× {{ Number(it.salePrice || 0).toFixed(0) }}</span>
                   </template>
-                  <template v-else></template>
+                  <template v-else>—</template>
                 </td>
 
                 <!-- 營業收入：只有成品 -->
@@ -976,10 +984,10 @@ watch(currentPage4, async (p) => {
                   <template v-else></template>
                 </td>
 
-                <!-- 銷貨成本：原料顯示成本；成品留空 -->
+                <!-- 銷貨成本：原料顯示成本；成品顯示「份數 × 耗材」 -->
                 <td>
                   <template v-if="isRaw(it)">{{ rawRowCost(it.name) }}</template>
-                  <template v-else></template>
+                  <template v-else>{{ productRowCost(it) }}</template>
                 </td>
               </tr>
 
