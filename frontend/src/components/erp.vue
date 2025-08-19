@@ -975,7 +975,7 @@ watch(currentPage4, async (p) => {
                     <input v-model.number="reportQty[it.name]" type="number" min="0" step="1" class="form-control text-center report" style="display:inline-block;" />
                     <span>× {{ Number(it.salePrice || 0).toFixed(0) }}</span>
                   </template>
-                  <template v-else>—</template>
+                  <template v-else></template>
                 </td>
 
                 <!-- 營業收入：只有成品 -->
