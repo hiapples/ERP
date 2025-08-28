@@ -1056,7 +1056,7 @@ watch(currentPage4, async (p) => {
                   <tr>
                     <th>日期</th>
                     <th>營業收入</th>
-                    <th>銷貨成本</th>
+                    <th>總成本</th>
                     <th>淨利</th>
                     <th></th>
                   </tr>
