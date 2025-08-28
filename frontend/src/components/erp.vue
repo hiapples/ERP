@@ -61,7 +61,7 @@ function clearOut () { outRow.value = { item: '', quantity: '', note: '' }; outU
 
 // === 讀取品項 ===
 async function fetchItems () {
-  const res = await axios.get(`${API}/items`)
+  const res = await axios.get(API + '/items')
   items.value = _arr(res?.data)
 }
 
@@ -70,7 +70,7 @@ const _arrData = (data) => (Array.isArray(data) ? data : (Array.isArray(data?.it
 
 const fetchRecords = async () => {
   try {
-    let url = `${API}/records`
+    let url = API + '/records'
     const q = []
     if (selectedDate2.value) q.push('date=' + selectedDate2.value)
     if (selectedItem.value)  q.push('item=' + encodeURIComponent(selectedItem.value))
@@ -84,7 +84,7 @@ const fetchRecords = async () => {
 
 const fetchRecords2 = async () => {
   try {
-    let url = `${API}/outrecords`
+    let url = API + '/outrecords'
     const q = []
     if (selectedDate4.value) q.push('date=' + selectedDate4.value)
     if (q.length) url += '?' + q.join('&')
@@ -99,8 +99,8 @@ const fetchRecords3 = async () => {
   try {
     isLoading.value = true
     const [inRes, outRes] = await Promise.all([
-      axios.get(`${API}/records`),
-      axios.get(`${API}/outrecords`)
+      axios.get(API + '/records'),
+      axios.get(API + '/outrecords')
     ])
     recordList.value  = _arrData(inRes?.data)
     recordList2.value = _arrData(outRes?.data)
@@ -185,7 +185,7 @@ function checkOutStock () {
 
   const left = inQty - outQty
   if (needQty > left + 1e-9) {
-    alert(`❌【${rawName}】庫存不足，需要 ${needQty.toFixed(2)}g，現有 ${left.toFixed(2)}g`)
+    alert('❌【' + rawName + '】庫存不足，需要 ' + needQty.toFixed(2) + 'g，現有 ' + left.toFixed(2) + 'g')
     return false
   }
   return true
@@ -205,7 +205,7 @@ const submitIn = async () => {
       note: row.note || '',
       date: selectedDate.value
     }
-    await axios.post(`${API}/records`, payload)
+    await axios.post(API + '/records', payload)
     alert('✅ 入庫成功')
     await fetchRecords3()
     clearIn()
@@ -234,7 +234,7 @@ const submitOut = async () => {
       note: row.note || '',
       date: selectedDate3.value
     }
-    await axios.post(`${API}/outrecords`, payload)
+    await axios.post(API + '/outrecords', payload)
     alert('✅ 出庫成功（已從原料扣庫）')
 
     // 重新載入入/出庫 &（若已選日期）刷新報表成本
@@ -256,7 +256,7 @@ const startEditRecord2 = (id) => { editingId.value = id }
 const confirmEdit = async () => {
   const rec = recordList.value.find(r => r?._id === editingId.value)
   try {
-    await axios.put(`${API}/records/${editingId.value}`, rec)
+    await axios.put(API + '/records/' + editingId.value, rec)
     editingId.value = null
     await fetchRecords()
   } catch (err) {
@@ -266,7 +266,7 @@ const confirmEdit = async () => {
 const confirmEdit2 = async () => {
   const rec = recordList2.value.find(r => r?._id === editingId.value)
   try {
-    await axios.put(`${API}/outrecords/${editingId.value}`, rec)
+    await axios.put(API + '/outrecords/' + editingId.value, rec)
     editingId.value = null
     await fetchRecords2()
     await fetchRawCostOfDate() // 出庫異動後，刷新報表原料成本
@@ -277,13 +277,13 @@ const confirmEdit2 = async () => {
 }
 const deleteRecord = async (id) => {
   if (!confirm('❌ 確定要刪除這筆資料嗎？')) return
-  try { await axios.delete(`${API}/records/${id}`); await fetchRecords() }
+  try { await axios.delete(API + '/records/' + id); await fetchRecords() }
   catch (err) { alert('❌ 刪除失敗：' + err.message) }
 }
 const deleteRecord2 = async (id) => {
   if (!confirm('❌ 確定要刪除這筆資料嗎？')) return
   try {
-    await axios.delete(`${API}/outrecords/${id}`)
+    await axios.delete(API + '/outrecords/' + id)
     await fetchRecords2()
     await fetchRawCostOfDate() // 出庫刪除後，刷新報表原料成本
     await fetchReportOfDate()
@@ -300,7 +300,7 @@ const newProduct = ref({ name: '', salePrice: '', consumableCost: '' })
 const addRawItem = async () => {
   if (!newRaw.value.name) { alert('請輸入原料名稱'); return }
   try {
-    await axios.post(`${API}/items`, {
+    await axios.post(API + '/items', {
       name: norm(newRaw.value.name),
       salePrice: 0,
       type: 'raw',
@@ -315,7 +315,7 @@ const addRawItem = async () => {
 const addProductItem = async () => {
   if (!newProduct.value.name) { alert('請輸入成品名稱'); return }
   try {
-    await axios.post(`${API}/items`, {
+    await axios.post(API + '/items', {
       name: norm(newProduct.value.name),
       salePrice: Number(newProduct.value.salePrice || 0),
       type: 'product',
@@ -335,7 +335,7 @@ const confirmEditItem = async (it) => {
       salePrice: Number(it.salePrice || 0),
       consumableCost: Number(it.consumableCost || 0)
     }
-    await axios.put(`${API}/items/${it._id}`, body)
+    await axios.put(API + '/items/' + it._id, body)
     itemEditingId.value = null
     await fetchItems()
   } catch (e) {
@@ -345,7 +345,7 @@ const confirmEditItem = async (it) => {
 const deleteItem = async (id) => {
   if (!confirm('確定刪除該品項？')) return
   try {
-    await axios.delete(`${API}/items/${id}`)
+    await axios.delete(API + '/items/' + id)
     await fetchItems()
   } catch (e) {
     alert('刪除失敗：' + (e?.message || ''))
@@ -356,10 +356,11 @@ const deleteItem = async (id) => {
 const reportRawCosts = ref({})   // { [rawName]: cost }
 const reportQty = ref({})        // { [productName]: qty }
 
-// 三種費用
-const stallFee = ref('')      // 攤販費
-const parkingFee = ref('')    // 停車費
-const insuranceFee = ref('')  // 保險費
+// 四種費用（新增：優待費）
+const stallFee = ref('')        // 攤販費（左上）
+const parkingFee = ref('')      // 停車費（右上）
+const insuranceFee = ref('')    // 保險費（左下）
+const discountFee = ref('')     // 優待費（右下）
 
 // 成品名 → 每份耗材成本
 const consumableMap = computed(() => {
@@ -372,8 +373,13 @@ const consumableMap = computed(() => {
 const fetchRawCostOfDate = async () => {
   if (!selectedDate5.value) { reportRawCosts.value = {}; return }
   try {
-    const { data } = await axios.get(`${API}/outrecords/total/${selectedDate5.value}`)
-    reportRawCosts.value = data?.byRaw || {}
+    const { data } = await axios.get(API + '/outrecords/total/' + selectedDate5.value)
+    // 後端會回 { total, byRaw }；如果只有 byRaw 也能算
+    if (data && data.byRaw) {
+      reportRawCosts.value = data.byRaw || {}
+    } else {
+      reportRawCosts.value = {}
+    }
   } catch {
     reportRawCosts.value = {}
   }
@@ -392,29 +398,30 @@ function applyReportToForm(r) {
   }
   reportQty.value = map
 
-  // 三費用
-  stallFee.value     = Number((r?.stallFee ?? r?.fixedExpense ?? 0) || 0)
-  parkingFee.value   = Number((r?.parkingFee ?? 0) || 0)
-  insuranceFee.value = Number((r?.insuranceFee ?? r?.extraExpense ?? 0) || 0)
+  // 四費用（含相容舊欄位）
+  stallFee.value       = Number((r?.stallFee ?? r?.fixedExpense ?? 0) || 0)
+  parkingFee.value     = Number((r?.parkingFee ?? 0) || 0)
+  insuranceFee.value   = Number((r?.insuranceFee ?? r?.extraExpense ?? 0) || 0)
+  discountFee.value    = Number((r?.discountFee ?? r?.preferentialFee ?? 0) || 0)
 }
 
 // 取得某日已存的報表
 const fetchReportOfDate = async () => {
   if (!selectedDate5.value) return
   try {
-    const { data } = await axios.get(`${API}/reports/${selectedDate5.value}`)
+    const { data } = await axios.get(API + '/reports/' + selectedDate5.value)
     if (data) applyReportToForm(data)
     else {
       const map = {}
       for (const it of productItems.value) map[it.name] = ''
       reportQty.value = map
-      stallFee.value = parkingFee.value = insuranceFee.value = ''
+      stallFee.value = parkingFee.value = insuranceFee.value = discountFee.value = ''
     }
   } catch {
     const map = {}
     for (const it of productItems.value) map[it.name] = ''
     reportQty.value = map
-    stallFee.value = parkingFee.value = insuranceFee.value = ''
+    stallFee.value = parkingFee.value = insuranceFee.value = discountFee.value = ''
   }
 }
 
@@ -481,12 +488,14 @@ const extraConsumableTotal = computed(() =>
 // 總成本 = 原料成本合計 + Σ(成品份數 × 耗材成本)
 const costTotal = computed(() => baseRawCostTotal.value + extraConsumableTotal.value)
 
+// 淨利 = 收入 - 成本 - 四費用
 const netProfit = computed(() =>
   revenueTotal.value
   - costTotal.value
   - Number(stallFee.value || 0)
   - Number(parkingFee.value || 0)
   - Number(insuranceFee.value || 0)
+  - Number(discountFee.value || 0)
 )
 
 // 送出報表（只送成品份數；原料不需輸入）
@@ -496,13 +505,13 @@ const submitReport = async () => {
   // 1) 份數一律要填（空白不行，0 可以）
   const unfilled = productItems.value.filter(it => isEmpty(reportQty.value[it.name]))
   if (unfilled.length > 0) {
-    alert('❌ 以下成品的「份數」尚未填寫（可填 0）：\n' + unfilled.map(i => `• ${i.name}`).join('\n'))
+    alert('❌ 以下成品的「份數」尚未填寫（可填 0）：\n' + unfilled.map(i => '• ' + i.name).join('\n'))
     return
   }
 
-  // 2) 三費用必填（0 可）
-  if (isEmpty(stallFee.value) || isEmpty(parkingFee.value) || isEmpty(insuranceFee.value)) {
-    alert('❌ 請填寫「攤販費 / 停車費 / 保險費」（可填 0）')
+  // 2) 四費用必填（0 可）
+  if (isEmpty(stallFee.value) || isEmpty(parkingFee.value) || isEmpty(insuranceFee.value) || isEmpty(discountFee.value)) {
+    alert('❌ 請填寫「攤販費 / 停車費 / 保險費 / 優待費」（可填 0）')
     return
   }
 
@@ -512,10 +521,13 @@ const submitReport = async () => {
     stallFee: Number(stallFee.value || 0),
     parkingFee: Number(parkingFee.value || 0),
     insuranceFee: Number(insuranceFee.value || 0),
+    // 同步兩個命名以相容不同後端
+    discountFee: Number(discountFee.value || 0),
+    preferentialFee: Number(discountFee.value || 0),
     netProfit: Number(netProfit.value || 0)
   }
   try {
-    await axios.post(`${API}/reports`, payload)
+    await axios.post(API + '/reports', payload)
     alert('✅ 報表已送出')
     await fetchReportsList()
   } catch (err) {
@@ -524,23 +536,50 @@ const submitReport = async () => {
 }
 
 // 報表總攬
-const reportList = ref([])
+const reportList = ref([]) // 這裡會放入已計算好 revenueOfDay / costOfDay 的資料
 const isReportsLoading = ref(false)
 async function fetchReportsList () {
   try {
     isReportsLoading.value = true
-    const { data } = await axios.get(`${API}/reports`)
-    const arr = _arr(data)
-    reportList.value = (arr || []).sort((a, b) => (b?.date || '').localeCompare(a?.date || ''))
+    const { data } = await axios.get(API + '/reports')
+    const arr = _arr(data) || []
+    // 先建價目對照（成品）
+    const saleMap = {}
+    const consMap = {}
+    for (const p of productItems.value) {
+      saleMap[p.name] = Number(p.salePrice || 0)
+      consMap[p.name] = Number(p.consumableCost || 0)
+    }
+    // 依日期新到舊排序
+    const sorted = arr.sort((a, b) => (b?.date || '').localeCompare(a?.date || ''))
+
+    // 計算每一天的 營業收入 / 銷貨成本
+    const enriched = await Promise.all(sorted.map(async (r) => {
+      const itemsArr = Array.isArray(r.items) ? r.items : []
+      const revenue = itemsArr.reduce((s, it) => s + Number(it.qty || 0) * Number(saleMap[it.item] || 0), 0)
+      const extraConsumable = itemsArr.reduce((s, it) => s + Number(it.qty || 0) * Number(consMap[it.item] || 0), 0)
+      let baseRawCost = 0
+      try {
+        const { data: rawCostData } = await axios.get(API + '/outrecords/total/' + encodeURIComponent(r.date))
+        if (rawCostData && typeof rawCostData.total !== 'undefined') {
+          baseRawCost = Number(rawCostData.total || 0)
+        } else if (rawCostData && rawCostData.byRaw) {
+          baseRawCost = Object.values(rawCostData.byRaw || {}).reduce((s, v) => s + Number(v || 0), 0)
+        }
+      } catch (e) { /* 忽略單日沒有原料出庫的情況 */ }
+      const cost = baseRawCost + extraConsumable
+      return { ...r, revenueOfDay: revenue, costOfDay: cost }
+    }))
+    reportList.value = enriched
   } finally {
     isReportsLoading.value = false
   }
 }
 const deleteReportByDate = async (dateStr) => {
   if (!dateStr) return
-  if (!confirm(`❌ 確定要清除 ${dateStr} 的報表資料嗎？`)) return
+  if (!confirm('❌ 確定要清除 ' + dateStr + ' 的報表資料嗎？')) return
   try {
-    await axios.delete(`${API}/reports/${encodeURIComponent(dateStr)}`)
+    await axios.delete(API + '/reports/' + encodeURIComponent(dateStr))
     alert('✅ 已清除該日報表資料')
     await fetchReportsList()
   } catch (e) {
@@ -1002,20 +1041,27 @@ watch(currentPage4, async (p) => {
             </tbody>
           </table>
 
-          <div class="d-flex justify-content-center align-items-center gap-3 mt-3">
-            <div style="font-size: 14px;">攤販費：</div>
-            <input v-model.number="stallFee" type="number" min="0" step="1" class="form-control text-center report2" />
-          </div>
-          <div class="d-flex justify-content-center align-items-center gap-3 mt-2">
-            <div style="font-size: 14px;">停車費：</div>
-            <input v-model.number="parkingFee" type="number" min="0" step="1" class="form-control text-center report2" />
-          </div>
-          <div class="d-flex justify-content-center align-items-center gap-3 mt-2">
-            <div style="font-size: 14px;">保險費：</div>
-            <input v-model.number="insuranceFee" type="number" min="0" step="1" class="form-control text-center report2" />
+          <!-- 四格：左上／右上／左下／右下 -->
+          <div class="fees-grid mt-3">
+            <div class="fee">
+              <label>攤販費：</label>
+              <input v-model.number="stallFee" type="number" min="0" step="1" class="form-control text-center report2" />
+            </div>
+            <div class="fee">
+              <label>停車費：</label>
+              <input v-model.number="parkingFee" type="number" min="0" step="1" class="form-control text-center report2" />
+            </div>
+            <div class="fee">
+              <label>保險費：</label>
+              <input v-model.number="insuranceFee" type="number" min="0" step="1" class="form-control text-center report2" />
+            </div>
+            <div class="fee">
+              <label>優待費：</label>
+              <input v-model.number="discountFee" type="number" min="0" step="1" class="form-control text-center report2" />
+            </div>
           </div>
 
-          <div class="d-flex justify-content-center align-items-center gap-3 mt-2">
+          <div class="d-flex justify-content-center align-items-center gap-3 mt-3">
             <div class="fw-bold">淨利：</div>
             <div>{{ netProfit.toFixed(2) }}</div>
           </div>
@@ -1035,15 +1081,24 @@ watch(currentPage4, async (p) => {
         <div class="form-wrapper">
           <h5 class="title">報表總覽</h5>
 
-        <div v-if="isReportsLoading" style="font-size:14px;color:#888;">載入中...</div>
+          <div v-if="isReportsLoading" style="font-size:14px;color:#888;">載入中...</div>
           <div v-else>
             <div v-if="reportList.length > 0" style="font-size:14px;">
               <table class="table report-table">
-                <thead><tr><th>日期</th><th>筆數</th><th>淨利</th><th></th></tr></thead>
+                <thead>
+                  <tr>
+                    <th>日期</th>
+                    <th>當天營業收入</th>
+                    <th>當天銷貨成本</th>
+                    <th>淨利</th>
+                    <th></th>
+                  </tr>
+                </thead>
                 <tbody>
-                  <tr v-for="r in reportList" :key="r._id">
+                  <tr v-for="r in reportList" :key="r._id || r.date">
                     <td>{{ r.date }}</td>
-                    <td>{{ Array.isArray(r.items) ? r.items.length : 0 }}</td>
+                    <td>{{ Number(r.revenueOfDay || 0).toFixed(0) }}</td>
+                    <td>{{ Number(r.costOfDay || 0).toFixed(2) }}</td>
                     <td>{{ r?.netProfit == null ? '' : Number(r.netProfit).toFixed(2) }}</td>
                     <td class="text-center"><button class="delete-btn" @click="deleteReportByDate(r.date)">刪</button></td>
                   </tr>
@@ -1102,4 +1157,23 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance:none; margin:
 .product-table th:nth-child(2), .product-table td:nth-child(2) { width: 60px; }
 .product-table th:nth-child(3), .product-table td:nth-child(3) { width: 60px; }
 .product-table th:nth-child(4), .product-table td:nth-child(4) { width: 60px; }
+
+/* 四格費用：左上／右上／左下／右下 */
+.fees-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  max-width: 360px;
+  margin: 0 auto;
+}
+.fee {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+}
+.fee label {
+  font-size: 14px;
+  white-space: nowrap;
+}
 </style>

@@ -5,7 +5,7 @@ const router = Router()
 const _arr = (v) => (Array.isArray(v) ? v : (Array.isArray(v?.items) ? v.items : []))
 const norm = (v) => (v == null ? '' : String(v).trim())
 
-// 查詢出庫（僅用 date 過濾，以免舊資料被 item 過濾掉）
+// 查詢出庫（僅用 date 過濾）
 router.get('/', async (req, res) => {
   const q = {}
   if (req.query.date) q.date = norm(req.query.date)
@@ -50,12 +50,9 @@ router.delete('/:id', async (req, res) => {
 })
 
 /**
- * 指定日的原料成本總表：依 item（原料名）分組，合計 price
- * 回傳格式：
- * {
- *   byRaw: { "<原料名>": <合計成本> },
- *   total: <所有原料成本總和>
- * }
+ * 指定日的原料成本總表
+ * 回傳：
+ * { byRaw: { "<原料名>": <合計成本> }, total: <所有原料成本總和> }
  */
 router.get('/total/:date', async (req, res) => {
   const date = norm(req.params.date)
