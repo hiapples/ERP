@@ -543,33 +543,44 @@ async function fetchReportsList () {
     isReportsLoading.value = true
     const { data } = await axios.get(API + '/reports')
     const arr = _arr(data) || []
-    // 先建價目對照（成品）
+
+    // 先建價目對照（成品售價）
     const saleMap = {}
-    const consMap = {}
-    for (const p of productItems.value) {
-      saleMap[p.name] = Number(p.salePrice || 0)
-      consMap[p.name] = Number(p.consumableCost || 0)
-    }
+    for (const p of productItems.value) saleMap[p.name] = Number(p.salePrice || 0)
+
     // 依日期新到舊排序
     const sorted = arr.sort((a, b) => (b?.date || '').localeCompare(a?.date || ''))
 
-    // 計算每一天的 營業收入 / 銷貨成本
-    const enriched = await Promise.all(sorted.map(async (r) => {
+    // 計算每一天的 營業收入 / “銷貨成本(=總成本-四費)”
+    const enriched = sorted.map((r) => {
       const itemsArr = Array.isArray(r.items) ? r.items : []
-      const revenue = itemsArr.reduce((s, it) => s + Number(it.qty || 0) * Number(saleMap[it.item] || 0), 0)
-      const extraConsumable = itemsArr.reduce((s, it) => s + Number(it.qty || 0) * Number(consMap[it.item] || 0), 0)
-      let baseRawCost = 0
-      try {
-        const { data: rawCostData } = await axios.get(API + '/outrecords/total/' + encodeURIComponent(r.date))
-        if (rawCostData && typeof rawCostData.total !== 'undefined') {
-          baseRawCost = Number(rawCostData.total || 0)
-        } else if (rawCostData && rawCostData.byRaw) {
-          baseRawCost = Object.values(rawCostData.byRaw || {}).reduce((s, v) => s + Number(v || 0), 0)
-        }
-      } catch (e) { /* 忽略單日沒有原料出庫的情況 */ }
-      const cost = baseRawCost + extraConsumable
-      return { ...r, revenueOfDay: revenue, costOfDay: cost }
-    }))
+
+      // 當天營業收入
+      const revenue = itemsArr.reduce(
+        (s, it) => s + Number(it.qty || 0) * Number(saleMap[it.item] || 0),
+        0
+      )
+
+      // 四費
+      const fees =
+        Number(r.stallFee || 0) +
+        Number(r.parkingFee || 0) +
+        Number(r.insuranceFee || 0) +
+        Number((r.discountFee ?? r.preferentialFee) || 0)
+
+      // 總成本 = 營業收入 - 淨利
+      const totalCost = Number(revenue) - Number(r.netProfit || 0)
+
+      // 當天銷貨成本（你要的新定義）
+      const cost = totalCost - fees
+
+      return {
+        ...r,
+        revenueOfDay: Math.round(revenue),     // 跟畫面一致，收入取整
+        costOfDay: Math.round(cost * 100) / 100
+      }
+    })
+
     reportList.value = enriched
   } finally {
     isReportsLoading.value = false
