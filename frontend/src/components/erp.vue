@@ -107,7 +107,7 @@ const fetchRecords3 = async () => {
   } catch (err) {
     alert('❌ 取得庫存資料失敗：' + err.message)
   } finally {
-       isLoading.value = false
+    isLoading.value = false
   }
 }
 
@@ -185,7 +185,7 @@ function checkOutStock () {
 
   const left = inQty - outQty
   if (needQty > left + 1e-9) {
-    alert('❌【' + rawName + '】庫存不足，需要 ' + needQty.toFixed(2) + 'g，現有 ' + left.toFixed(2) + 'g')
+    alert(`❌【${rawName}】庫存不足，需要 ${needQty.toFixed(2)}g，現有 ${left.toFixed(2)}g`)
     return false
   }
   return true
@@ -369,17 +369,12 @@ const consumableMap = computed(() => {
   return m
 })
 
-// 取得指定日原料成本（由後端 outrecords 匯總）
+// 取得指定日原料成本（由後端 outrecords 彙總）
 const fetchRawCostOfDate = async () => {
   if (!selectedDate5.value) { reportRawCosts.value = {}; return }
   try {
     const { data } = await axios.get(API + '/outrecords/total/' + selectedDate5.value)
-    // 後端會回 { total, byRaw }；如果只有 byRaw 也能算
-    if (data && data.byRaw) {
-      reportRawCosts.value = data.byRaw || {}
-    } else {
-      reportRawCosts.value = {}
-    }
+    reportRawCosts.value = data?.byRaw || {}
   } catch {
     reportRawCosts.value = {}
   }
@@ -398,7 +393,7 @@ function applyReportToForm(r) {
   }
   reportQty.value = map
 
-  // 四費用（含相容舊欄位）
+  // 四費用
   stallFee.value       = Number((r?.stallFee ?? r?.fixedExpense ?? 0) || 0)
   parkingFee.value     = Number((r?.parkingFee ?? 0) || 0)
   insuranceFee.value   = Number((r?.insuranceFee ?? r?.extraExpense ?? 0) || 0)
@@ -505,7 +500,7 @@ const submitReport = async () => {
   // 1) 份數一律要填（空白不行，0 可以）
   const unfilled = productItems.value.filter(it => isEmpty(reportQty.value[it.name]))
   if (unfilled.length > 0) {
-    alert('❌ 以下成品的「份數」尚未填寫（可填 0）：\n' + unfilled.map(i => '• ' + i.name).join('\n'))
+    alert('❌ 以下成品的「份數」尚未填寫（可填 0）：\n' + unfilled.map(i => `• ${i.name}`).join('\n'))
     return
   }
 
@@ -521,9 +516,8 @@ const submitReport = async () => {
     stallFee: Number(stallFee.value || 0),
     parkingFee: Number(parkingFee.value || 0),
     insuranceFee: Number(insuranceFee.value || 0),
-    // 同步兩個命名以相容不同後端
-    discountFee: Number(discountFee.value || 0),
-    preferentialFee: Number(discountFee.value || 0),
+    discountFee: Number(discountFee.value || 0),       // 優待費
+    preferentialFee: Number(discountFee.value || 0),   // 相容命名
     netProfit: Number(netProfit.value || 0)
   }
   try {
@@ -535,60 +529,22 @@ const submitReport = async () => {
   }
 }
 
-// 報表總攬
-const reportList = ref([]) // 這裡會放入已計算好 revenueOfDay / costOfDay 的資料
+// 報表總攬（從後端拿：revenueOfDay、costOfDay、netProfit）
+const reportList = ref([])
 const isReportsLoading = ref(false)
 async function fetchReportsList () {
   try {
     isReportsLoading.value = true
     const { data } = await axios.get(API + '/reports')
     const arr = _arr(data) || []
-
-    // 先建價目對照（成品售價）
-    const saleMap = {}
-    for (const p of productItems.value) saleMap[p.name] = Number(p.salePrice || 0)
-
-    // 依日期新到舊排序
-    const sorted = arr.sort((a, b) => (b?.date || '').localeCompare(a?.date || ''))
-
-    // 計算每一天的 營業收入 / “銷貨成本(=總成本-四費)”
-    const enriched = sorted.map((r) => {
-      const itemsArr = Array.isArray(r.items) ? r.items : []
-
-      // 當天營業收入
-      const revenue = itemsArr.reduce(
-        (s, it) => s + Number(it.qty || 0) * Number(saleMap[it.item] || 0),
-        0
-      )
-
-      // 四費
-      const fees =
-        Number(r.stallFee || 0) +
-        Number(r.parkingFee || 0) +
-        Number(r.insuranceFee || 0) +
-        Number((r.discountFee ?? r.preferentialFee) || 0)
-
-      // 總成本 = 營業收入 - 淨利
-      const totalCost = Number(revenue) - Number(r.netProfit || 0)
-
-      // 當天銷貨成本（你要的新定義）
-      const cost = totalCost - fees
-
-      return {
-        ...r,
-        revenueOfDay: Math.round(revenue),     // 跟畫面一致，收入取整
-        costOfDay: Math.round(cost * 100) / 100
-      }
-    })
-
-    reportList.value = enriched
+    reportList.value = (arr || []).sort((a, b) => (b?.date || '').localeCompare(a?.date || ''))
   } finally {
     isReportsLoading.value = false
   }
 }
 const deleteReportByDate = async (dateStr) => {
   if (!dateStr) return
-  if (!confirm('❌ 確定要清除 ' + dateStr + ' 的報表資料嗎？')) return
+  if (!confirm(`❌ 確定要清除 ${dateStr} 的報表資料嗎？`)) return
   try {
     await axios.delete(API + '/reports/' + encodeURIComponent(dateStr))
     alert('✅ 已清除該日報表資料')

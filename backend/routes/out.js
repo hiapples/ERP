@@ -50,9 +50,8 @@ router.delete('/:id', async (req, res) => {
 })
 
 /**
- * 指定日的原料成本總表
- * 回傳：
- * { byRaw: { "<原料名>": <合計成本> }, total: <所有原料成本總和> }
+ * 指定日的原料成本總表：依 item 分組，合計 price
+ * 回傳：{ byRaw: { 原料名: 合計 }, total: 總和 }
  */
 router.get('/total/:date', async (req, res) => {
   const date = norm(req.params.date)

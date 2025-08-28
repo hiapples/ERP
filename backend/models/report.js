@@ -5,7 +5,7 @@ const ReportSchema = new mongoose.Schema(
     date: { type: String, required: true, unique: true }, // YYYY-MM-DD
     items: [
       {
-        item: { type: String, required: true }, // 成品名稱（只有成品會出現在這）
+        item: { type: String, required: true },  // 成品名稱（只有成品）
         qty: { type: Number, required: true }
       }
     ],
@@ -13,7 +13,7 @@ const ReportSchema = new mongoose.Schema(
     parkingFee: { type: Number, default: 0 },
     insuranceFee: { type: Number, default: 0 },
 
-    // 🔹 新增：優待費（兩個欄位相容不同命名）
+    // 優待費（雙名稱相容）
     discountFee: { type: Number, default: 0 },
     preferentialFee: { type: Number, default: 0 },
 
