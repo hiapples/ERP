@@ -3,4 +3,5 @@ main = "src/index.js"
 compatibility_date = "2024-09-01"
 
 [triggers]
-crons = ["*/4 * * * *"]  # 每 4 分鐘喚醒一次
+# 建議 2 分鐘一次，Render Free 常在 10~15 分睡著
+crons = ["*/2 * * * *"]
