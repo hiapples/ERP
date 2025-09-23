@@ -1,121 +1,161 @@
-// backend/routes/reports.js
-const express = require('express')
-const router = express.Router()
-const Report = require('../models/report')
-const Item = require('../models/item')
-const OutRecord = require('../models/out')
+// backend/routes/reports.js  (ESM)
+import { Router } from 'express'
+import Report from '../models/report.js'
+import Item from '../models/item.js'
+import OutRecord from '../models/out.js'
 
-/**
- * 依日期計算：
- * revenueOfDay = Σ(成品 qty * salePrice)
- * baseRawCost  = 該日所有 OutRecord 價格合計
- * extraCost    = Σ(成品 qty * consumableCost)
- * costOfDay    = baseRawCost + extraCost
- * netProfit    = revenueOfDay - costOfDay - 六費用
- */
+const router = Router()
+const norm = (v) => (v == null ? '' : String(v).trim())
+const to2  = (n) => Math.round(Number(n || 0) * 100) / 100
+
+// 內部：計算當日合計
+// revenueOfDay = Σ(成品 qty * salePrice)
+// baseRawCost  = 當日所有 OutRecord.price 合計
+// extraCost    = Σ(成品 qty * consumableCost)
+// costOfDay    = baseRawCost + extraCost
+// netProfit    = revenueOfDay - costOfDay - 六費用
 async function computeDayTotals(date, itemsRows, fees) {
-  const products = await Item.find({ type: 'product' })
-  const priceMap = {}
+  // 取產品價 & 耗材
+  const products = await Item.find({ type: 'product' }).lean()
+  const saleMap  = {}
   const extraMap = {}
-  for (var i = 0; i < products.length; i++) {
-    priceMap[products[i].name] = Number(products[i].salePrice || 0)
-    extraMap[products[i].name]  = Number(products[i].consumableCost || 0)
+  for (const p of products) {
+    saleMap[p.name]  = Number(p.salePrice || 0)
+    extraMap[p.name] = Number(p.consumableCost || 0)
   }
 
   let revenue = 0
   let extraCost = 0
-  for (var j = 0; j < itemsRows.length; j++) {
-    const row = itemsRows[j]
-    const name = String(row.item || '')
-    const qty  = Number(row.qty || 0)
-    revenue   += qty * (priceMap[name] || 0)
+  for (const r of itemsRows) {
+    const name = norm(r.item)
+    const qty  = Number(r.qty || 0)
+    revenue   += qty * (saleMap[name]  || 0)
     extraCost += qty * (extraMap[name] || 0)
   }
 
-  const outs = await OutRecord.find({ date: date })
+  const outs = await OutRecord.find({ date }).lean()
   let baseRawCost = 0
-  for (var k = 0; k < outs.length; k++) baseRawCost += Number(outs[k].price || 0)
+  for (const o of outs) baseRawCost += Number(o.price || 0)
 
-  const cost = baseRawCost + extraCost
+  const costOfDay  = baseRawCost + extraCost
   const totalFees =
-    Number(fees.stallFee || 0) + Number(fees.parkingFee || 0) + Number(fees.insuranceFee || 0) +
-    Number(fees.treatFee || 0) + Number(fees.personnelFee || 0) + Number(fees.guildFee || 0)
+    Number(fees.stallFee || 0) +
+    Number(fees.parkingFee || 0) +
+    Number(fees.insuranceFee || 0) +
+    Number(fees.treatFee || 0) +
+    Number(fees.personnelFee || 0) +
+    Number(fees.guildFee || 0)
 
-  const net = revenue - cost - totalFees
-  return { revenueOfDay: revenue, costOfDay: cost, netProfit: net }
+  const netProfit = revenue - costOfDay - totalFees
+  return {
+    revenueOfDay: to2(revenue),
+    costOfDay: to2(costOfDay),
+    netProfit: to2(netProfit),
+  }
 }
 
-// 取得所有報表（簡表）
-router.get('/', async function (req, res) {
-  const list = await Report.find().sort({ date: -1 })
-  res.json(list)
+/**
+ * 取得全部（新到舊）
+ * 若舊資料沒有 revenueOfDay/costOfDay，會以 (Σqty*售價) 與 (revenue - netProfit) 快速補齊回傳（不寫回 DB）
+ */
+router.get('/', async (_req, res) => {
+  const list = await Report.find().sort({ date: -1 }).lean()
+
+  // 產品售價快取（僅用於缺欄位時的快速估算）
+  const products = await Item.find({ type: 'product' }).lean()
+  const saleMap = {}
+  for (const p of products) saleMap[p.name] = Number(p.salePrice || 0)
+
+  const enriched = list.map(r => {
+    const itemsArr = Array.isArray(r.items) ? r.items : []
+    let revenue = Number(r.revenueOfDay || 0)
+
+    if (!revenue) {
+      revenue = itemsArr.reduce(
+        (s, it) => s + Number(it.qty || 0) * Number(saleMap[norm(it.item)] || 0),
+        0
+      )
+    }
+
+    const revenue2  = to2(revenue)
+    const costOfDay = r.costOfDay != null ? to2(r.costOfDay) : to2(revenue2 - Number(r.netProfit || 0))
+
+    return {
+      ...r,
+      revenueOfDay: revenue2,
+      costOfDay,
+    }
+  })
+
+  res.json(enriched)
 })
 
-// 取得某日報表
-router.get('/:date', async function (req, res) {
-  const date = String(req.params.date || '')
-  const doc = await Report.findOne({ date: date })
-  if (!doc) return res.json(null)
-  res.json(doc)
+// 取得某日
+router.get('/:date', async (req, res) => {
+  const date = norm(req.params.date)
+  const doc = await Report.findOne({ date }).lean()
+  res.json(doc || null)
 })
 
-// 新增/覆寫某日報表（idempotent）
-router.post('/', async function (req, res) {
+// 新增/覆寫（以 date upsert）— 後端計算合計與淨利；相容舊欄位
+router.post('/', async (req, res) => {
   const b = req.body || {}
-  const date = String(b.date || '')
-  const itemsRows = Array.isArray(b.items) ? b.items.map(function (r) {
-    return { item: String(r.item || ''), qty: Number(r.qty || 0) }
-  }) : []
+  const date = norm(b.date)
 
-  // 新六費用（後端以新欄位為主）
+  // 成品份數
+  const itemsRows = Array.isArray(b.items)
+    ? b.items.map(r => ({ item: norm(r.item), qty: Number(r.qty || 0) }))
+    : []
+
+  // 六費用（新）+ 舊欄位相容（discountFee / preferentialFee → treatFee）
+  const treatFeeFromOld = (b.treatFee != null ? b.treatFee : (b.discountFee != null ? b.discountFee : b.preferentialFee))
   const fees = {
     stallFee: Number(b.stallFee || 0),
     parkingFee: Number(b.parkingFee || 0),
     insuranceFee: Number(b.insuranceFee || 0),
-    treatFee: Number(b.treatFee != null ? b.treatFee : (b.discountFee != null ? b.discountFee : b.preferentialFee) || 0),
+    treatFee: Number(treatFeeFromOld || 0),   // 請客費（優待費更名）
     personnelFee: Number(b.personnelFee || 0),
-    guildFee: Number(b.guildFee || 0)
+    guildFee: Number(b.guildFee || 0),
   }
 
+  // 後端計算合計
   const totals = await computeDayTotals(date, itemsRows, fees)
 
-  const doc = await Report.findOneAndUpdate(
-    { date: date },
-    {
-      $set: {
-        date: date,
-        items: itemsRows,
+  // 準備寫入（同時保留舊欄位，方便舊前端或舊匯出）
+  const payload = {
+    date,
+    items: itemsRows,
 
-        // 六費用（新）
-        stallFee: fees.stallFee,
-        parkingFee: fees.parkingFee,
-        insuranceFee: fees.insuranceFee,
-        treatFee: fees.treatFee,
-        personnelFee: fees.personnelFee,
-        guildFee: fees.guildFee,
+    // 新欄位
+    stallFee: fees.stallFee,
+    parkingFee: fees.parkingFee,
+    insuranceFee: fees.insuranceFee,
+    treatFee: fees.treatFee,
+    personnelFee: fees.personnelFee,
+    guildFee: fees.guildFee,
 
-        // 舊欄位相容性寫入（方便舊前端、舊匯出）
-        discountFee: fees.treatFee,
-        preferentialFee: fees.treatFee,
-        fixedExpense: fees.stallFee,
-        extraExpense: fees.insuranceFee,
+    // 舊欄位鏡像（相容）
+    discountFee: fees.treatFee,
+    preferentialFee: fees.treatFee,
+    fixedExpense: fees.stallFee,
+    extraExpense: fees.insuranceFee,
 
-        revenueOfDay: Number(totals.revenueOfDay.toFixed(2)),
-        costOfDay: Number(totals.costOfDay.toFixed(2)),
-        netProfit: Number(totals.netProfit.toFixed(2))
-      }
-    },
-    { upsert: true, new: true }
-  )
+    // 合計
+    revenueOfDay: totals.revenueOfDay,
+    costOfDay: totals.costOfDay,
+    netProfit: totals.netProfit,
+  }
 
-  res.json(doc)
+  await Report.updateOne({ date }, { $set: payload }, { upsert: true })
+  const saved = await Report.findOne({ date }).lean()
+  res.json(saved)
 })
 
-// 刪除某日報表
-router.delete('/:date', async function (req, res) {
-  const date = String(req.params.date || '')
-  await Report.deleteOne({ date: date })
-  res.json({ ok: 1 })
+// 刪除某日
+router.delete('/:date', async (req, res) => {
+  const date = norm(req.params.date)
+  await Report.deleteOne({ date })
+  res.json({ ok: true })
 })
 
-module.exports = router
+export default router
