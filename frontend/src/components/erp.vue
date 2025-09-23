@@ -1037,16 +1037,16 @@ watch(currentPage4, async (p) => {
               <input v-model.number="insuranceFee" type="number" min="0" step="1" class="form-control text-center report2" />
             </div>
             <div class="fee">
-              <label>請客費：</label>
-              <input v-model.number="treatFee" type="number" min="0" step="1" class="form-control text-center report2" />
+              <label>公會費：</label>
+              <input v-model.number="guildFee" type="number" min="0" step="1" class="form-control text-center report2" />
             </div>
             <div class="fee">
               <label>人事費：</label>
               <input v-model.number="personnelFee" type="number" min="0" step="1" class="form-control text-center report2" />
             </div>
             <div class="fee">
-              <label>公會費：</label>
-              <input v-model.number="guildFee" type="number" min="0" step="1" class="form-control text-center report2" />
+              <label>請客費：</label>
+              <input v-model.number="treatFee" type="number" min="0" step="1" class="form-control text-center report2" />
             </div>
           </div>
 
