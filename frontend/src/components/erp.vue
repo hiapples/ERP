@@ -32,8 +32,24 @@ const items = ref([])
 const norm = (v) => (v == null ? '' : String(v).trim())
 const _arr = (v) => (Array.isArray(v) ? v : (Array.isArray(v?.items) ? v.items : []))
 
-const rawItems = computed(() => _arr(items.value).filter(i => i?.type === 'raw'))
-const productItems = computed(() => _arr(items.value).filter(i => i?.type === 'product'))
+const rawItems = computed(() => {
+  const arr = _arr(items.value).filter(i => i?.type === 'raw')
+  return arr.slice().sort((a, b) => {
+    const ka = a?.createdAt || a?._id || ''
+    const kb = b?.createdAt || b?._id || ''
+    return String(ka).localeCompare(String(kb)) // 由舊到新
+  })
+})
+
+const productItems = computed(() => {
+  const arr = _arr(items.value).filter(i => i?.type === 'product')
+  return arr.slice().sort((a, b) => {
+    const ka = a?.createdAt || a?._id || ''
+    const kb = b?.createdAt || b?._id || ''
+    return String(ka).localeCompare(String(kb)) // 由舊到新
+  })
+})
+
 
 // 入庫/出庫都只選原料
 const inOptions  = computed(() => rawItems.value.map(i => i?.name).filter(Boolean))
