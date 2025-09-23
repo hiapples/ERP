@@ -372,13 +372,10 @@ const deleteItem = async (id) => {
 const reportRawCosts = ref({})   // { [rawName]: cost }
 const reportQty = ref({})        // { [productName]: qty }
 
-// 六種費用（請客費取代優待費）
 const stallFee = ref('')        // 攤販費
 const parkingFee = ref('')      // 停車費
-const insuranceFee = ref('')    // 保險費
 const treatFee = ref('')        // 請客費（原優待費）
 const personnelFee = ref('')    // 人事費
-const guildFee = ref('')        // 公會費
 
 // 成品名 → 每份耗材成本
 const consumableMap = computed(() => {
@@ -411,13 +408,11 @@ function applyReportToForm(r) {
   }
   reportQty.value = map
 
-  // 六費用
-  stallFee.value       = Number((r?.stallFee ?? r?.fixedExpense ?? 0) || 0)
-  parkingFee.value     = Number((r?.parkingFee ?? 0) || 0)
-  insuranceFee.value   = Number((r?.insuranceFee ?? r?.extraExpense ?? 0) || 0)
-  treatFee.value       = Number((r?.treatFee ?? r?.discountFee ?? r?.preferentialFee ?? 0) || 0)
-  personnelFee.value   = Number((r?.personnelFee ?? 0) || 0)
-  guildFee.value       = Number((r?.guildFee ?? 0) || 0)
+  // 四費用（保險費、公會費已移除）
+  stallFee.value     = Number((r?.stallFee ?? r?.fixedExpense ?? 0) || 0)
+  parkingFee.value   = Number((r?.parkingFee ?? 0) || 0)
+  treatFee.value     = Number((r?.treatFee ?? r?.discountFee ?? r?.preferentialFee ?? 0) || 0)
+  personnelFee.value = Number((r?.personnelFee ?? 0) || 0)
 }
 
 // 取得某日已存的報表
@@ -430,12 +425,12 @@ const fetchReportOfDate = async () => {
       const map = {}
       for (const it of productItems.value) map[it.name] = ''
       reportQty.value = map
-      stallFee.value = parkingFee.value = insuranceFee.value = treatFee.value = personnelFee.value = guildFee.value = ''
+      stallFee.value = parkingFee.value = treatFee.value = personnelFee.value = ''
     }
   } catch {
     const map = {}
     for (const it of productItems.value) map[it.name] = ''
-    reportQty.value = map
+    reportQty.value = mapstallFee.value = parkingFee.value = treatFee.value = personnelFee.value = ''
     stallFee.value = parkingFee.value = insuranceFee.value = treatFee.value = personnelFee.value = guildFee.value = ''
   }
 }
@@ -503,17 +498,16 @@ const extraConsumableTotal = computed(() =>
 // 總成本 = 原料成本合計 + Σ(成品份數 × 耗材成本)
 const costTotal = computed(() => baseRawCostTotal.value + extraConsumableTotal.value)
 
-// 淨利 = 收入 - 成本 - 六費用
+// 淨利 = 收入 - 成本 - 四費用
 const netProfit = computed(() =>
   revenueTotal.value
   - costTotal.value
   - Number(stallFee.value || 0)
   - Number(parkingFee.value || 0)
-  - Number(insuranceFee.value || 0)
   - Number(treatFee.value || 0)
   - Number(personnelFee.value || 0)
-  - Number(guildFee.value || 0)
 )
+
 
 // 送出報表（只送成品份數；原料不需輸入）
 const submitReport = async () => {
@@ -526,12 +520,9 @@ const submitReport = async () => {
     return
   }
 
-  // 2) 六費用必填（0 可）
-  if (
-    isEmpty(stallFee.value) || isEmpty(parkingFee.value) || isEmpty(insuranceFee.value) ||
-    isEmpty(treatFee.value) || isEmpty(personnelFee.value) || isEmpty(guildFee.value)
-  ) {
-    alert('❌ 請填寫「攤販費 / 停車費 / 保險費 / 請客費 / 人事費 / 公會費」（可填 0）')
+  // 2) 四費用必填（0 可）
+  if (isEmpty(stallFee.value) || isEmpty(parkingFee.value) || isEmpty(treatFee.value) || isEmpty(personnelFee.value)) {
+    alert('❌ 請填寫「攤販費 / 停車費 / 請客費 / 人事費」（可填 0）')
     return
   }
 
@@ -540,16 +531,15 @@ const submitReport = async () => {
     items: productItems.value.map(it => ({ item: it.name, qty: Number(reportQty.value[it.name] || 0) })),
     stallFee: Number(stallFee.value || 0),
     parkingFee: Number(parkingFee.value || 0),
-    insuranceFee: Number(insuranceFee.value || 0),
-    // 新欄位
+    // 新欄位（保留請客費、人事費）
     treatFee: Number(treatFee.value || 0),
     personnelFee: Number(personnelFee.value || 0),
-    guildFee: Number(guildFee.value || 0),
-    // 相容舊欄位鏡射（後端會忽略或一起存）
+    // 相容舊欄位鏡射（部分舊後端會讀這兩個）
     discountFee: Number(treatFee.value || 0),
     preferentialFee: Number(treatFee.value || 0),
-    netProfit: Number(netProfit.value || 0) // 即便後端重算，帶上也不影響
+    netProfit: Number(netProfit.value || 0)
   }
+
   try {
     await axios.post(API + '/reports', payload)
     alert('✅ 報表已送出')
@@ -558,6 +548,7 @@ const submitReport = async () => {
     alert('❌ 報表傳送失敗：' + err.message)
   }
 }
+
 
 // 報表總攬（從後端拿：revenueOfDay、costOfDay、netProfit）
 const reportList = ref([])
@@ -1038,7 +1029,7 @@ watch(currentPage4, async (p) => {
             </tbody>
           </table>
 
-          <!-- 六格費用 -->
+          <!-- 四格費用 -->
           <div class="fees-grid mt-3">
             <div class="fee">
               <label>攤販費：</label>
@@ -1049,14 +1040,6 @@ watch(currentPage4, async (p) => {
               <input v-model.number="parkingFee" type="number" min="0" step="1" class="form-control text-center report2" />
             </div>
             <div class="fee">
-              <label>保險費：</label>
-              <input v-model.number="insuranceFee" type="number" min="0" step="1" class="form-control text-center report2" />
-            </div>
-            <div class="fee">
-              <label>公會費：</label>
-              <input v-model.number="guildFee" type="number" min="0" step="1" class="form-control text-center report2" />
-            </div>
-            <div class="fee">
               <label>人事費：</label>
               <input v-model.number="personnelFee" type="number" min="0" step="1" class="form-control text-center report2" />
             </div>
@@ -1065,7 +1048,6 @@ watch(currentPage4, async (p) => {
               <input v-model.number="treatFee" type="number" min="0" step="1" class="form-control text-center report2" />
             </div>
           </div>
-
           <div class="d-flex justify-content-center align-items-center gap-3 mt-3">
             <div class="fw-bold">淨利：</div>
             <div>{{ netProfit.toFixed(2) }}</div>
