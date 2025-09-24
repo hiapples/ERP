@@ -12,7 +12,7 @@ const ReportSchema = new mongoose.Schema(
 
     // 四費用（保留請客費；相容舊欄位）
     stallFee: { type: Number, default: 0 },        // 攤販費
-    parkingFee: { type: Number, default: 0 },      // 停車費
+    parkingFee: { type: Number, default: 0 },      //飲水費
     treatFee: { type: Number, default: 0 },        // 請客費（原優待費）
     personnelFee: { type: Number, default: 0 },    // 人事費
 

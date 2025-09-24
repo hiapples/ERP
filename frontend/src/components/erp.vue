@@ -373,7 +373,7 @@ const reportRawCosts = ref({})   // { [rawName]: cost }
 const reportQty = ref({})        // { [productName]: qty }
 
 const stallFee = ref('')        // 攤販費
-const parkingFee = ref('')      // 停車費
+const parkingFee = ref('')      //飲水費
 const treatFee = ref('')        // 請客費（原優待費）
 const personnelFee = ref('')    // 人事費
 
@@ -522,7 +522,7 @@ const submitReport = async () => {
 
   // 2) 四費用必填（0 可）
   if (isEmpty(stallFee.value) || isEmpty(parkingFee.value) || isEmpty(treatFee.value) || isEmpty(personnelFee.value)) {
-    alert('❌ 請填寫「攤販費 / 停車費 / 請客費 / 人事費」（可填 0）')
+    alert('❌ 請填寫「攤販費 / 飲水費 / 請客費 / 人事費」（可填 0）')
     return
   }
 
@@ -1036,7 +1036,7 @@ watch(currentPage4, async (p) => {
               <input v-model.number="stallFee" type="number" min="0" step="1" class="form-control text-center report2" />
             </div>
             <div class="fee">
-              <label>停車費：</label>
+              <label>飲水費：</label>
               <input v-model.number="parkingFee" type="number" min="0" step="1" class="form-control text-center report2" />
             </div>
             <div class="fee">
