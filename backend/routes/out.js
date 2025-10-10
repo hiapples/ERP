@@ -2,73 +2,56 @@ import { Router } from 'express'
 import OutRecord from '../models/out.js'
 
 const router = Router()
-const _arr = (v) => (Array.isArray(v) ? v : (Array.isArray(v?.items) ? v.items : []))
-const norm = (v) => (v == null ? '' : String(v).trim())
 
-// 查詢出庫（僅用 date 過濾）
-router.get('/', async (req, res) => {
-  const q = {}
-  if (req.query.date) q.date = norm(req.query.date)
-  const list = await OutRecord.find(q).sort({ createdAt: -1 }).lean()
-  res.json(_arr(list))
+// 查詢：支援 ?date=YYYY-MM-DD & ?item=成品名
+router.get('/', async (req, res, next) => {
+  try {
+    const q = {}
+    if (req.query.date) q.date = String(req.query.date)
+    if (req.query.item) q.item = String(req.query.item)
+    const list = await OutRecord.find(q).sort({ createdAt: -1 }).lean()
+    res.json({ items: list })
+  } catch (e) { next(e) }
 })
 
-// 新增出庫（直接扣原料）
-router.post('/', async (req, res) => {
-  const b = req.body || {}
-  const doc = await OutRecord.create({
-    item: norm(b.item),
-    quantity: Number(b.quantity || 0),
-    price: Number(b.price || 0),
-    note: norm(b.note || ''),
-    date: norm(b.date)
-  })
-  res.json(doc)
+// 建立
+router.post('/', async (req, res, next) => {
+  try {
+    const payload = {
+      item: String(req.body.item || '').trim(),
+      quantity: Number(req.body.quantity || 0),
+      price: Number(req.body.price || 0), // 前端用平均單價*數量帶入
+      note: String(req.body.note || ''),
+      date: String(req.body.date || '')
+    }
+    if (!payload.item) return res.status(400).json({ error: 'item is required' })
+    if (!payload.date) return res.status(400).json({ error: 'date is required' })
+    const doc = await OutRecord.create(payload)
+    res.json(doc)
+  } catch (e) { next(e) }
 })
 
 // 更新
-router.put('/:id', async (req, res) => {
-  const b = req.body || {}
-  const doc = await OutRecord.findByIdAndUpdate(
-    req.params.id,
-    {
-      item: norm(b.item),
-      quantity: Number(b.quantity || 0),
-      price: Number(b.price || 0),
-      note: norm(b.note || ''),
-      date: norm(b.date)
-    },
-    { new: true }
-  )
-  res.json(doc)
+router.put('/:id', async (req, res, next) => {
+  try {
+    const update = {
+      item: req.body.item == null ? undefined : String(req.body.item).trim(),
+      quantity: req.body.quantity == null ? undefined : Number(req.body.quantity),
+      price: req.body.price == null ? undefined : Number(req.body.price),
+      note: req.body.note == null ? undefined : String(req.body.note),
+      date: req.body.date == null ? undefined : String(req.body.date)
+    }
+    const doc = await OutRecord.findByIdAndUpdate(req.params.id, update, { new: true })
+    res.json(doc)
+  } catch (e) { next(e) }
 })
 
 // 刪除
-router.delete('/:id', async (req, res) => {
-  await OutRecord.findByIdAndDelete(req.params.id)
-  res.json({ ok: true })
-})
-
-/**
- * 指定日的原料成本總表：依 item 分組，合計 price
- * 回傳：{ byRaw: { 原料名: 合計 }, total: 總和 }
- */
-router.get('/total/:date', async (req, res) => {
-  const date = norm(req.params.date)
-  const agg = await OutRecord.aggregate([
-    { $match: { date } },
-    { $group: { _id: '$item', amt: { $sum: '$price' } } }
-  ])
-
-  const byRaw = {}
-  let total = 0
-  for (const row of agg) {
-    const name = row?._id ?? ''
-    const val = Number(row?.amt || 0)
-    if (name) byRaw[name] = val
-    total += val
-  }
-  res.json({ byRaw, total })
+router.delete('/:id', async (req, res, next) => {
+  try {
+    await OutRecord.findByIdAndDelete(req.params.id)
+    res.json({ ok: true })
+  } catch (e) { next(e) }
 })
 
 export default router

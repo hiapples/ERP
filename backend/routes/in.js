@@ -1,53 +1,57 @@
 import { Router } from 'express'
-import InRecord from '../models/in.js'
+import Record from '../models/in.js'
 
 const router = Router()
-const _arr = (v) => (Array.isArray(v) ? v : (Array.isArray(v?.items) ? v.items : []))
-const norm = (v) => (v == null ? '' : String(v).trim())
 
-// 查詢入庫
-router.get('/', async (req, res) => {
-  const q = {}
-  if (req.query.date) q.date = norm(req.query.date)
-  if (req.query.item) q.item = norm(req.query.item)
-  const list = await InRecord.find(q).sort({ createdAt: -1 }).lean()
-  res.json(_arr(list))
+// 查詢：支援 ?date=YYYY-MM-DD & ?item=成品名
+router.get('/', async (req, res, next) => {
+  try {
+    const q = {}
+    if (req.query.date) q.date = String(req.query.date)
+    if (req.query.item) q.item = String(req.query.item)
+    const list = await Record.find(q).sort({ createdAt: -1 }).lean()
+    res.json({ items: list })
+  } catch (e) { next(e) }
 })
 
-// 新增入庫
-router.post('/', async (req, res) => {
-  const b = req.body || {}
-  const doc = await InRecord.create({
-    item: norm(b.item),
-    quantity: Number(b.quantity || 0),
-    price: Number(b.price || 0),
-    note: norm(b.note || ''),
-    date: norm(b.date)
-  })
-  res.json(doc)
+// 建立
+router.post('/', async (req, res, next) => {
+  try {
+    const payload = {
+      item: String(req.body.item || '').trim(),
+      quantity: Number(req.body.quantity || 0),
+      price: Number(req.body.price || 0),
+      note: String(req.body.note || ''),
+      date: String(req.body.date || '')
+    }
+    if (!payload.item) return res.status(400).json({ error: 'item is required' })
+    if (!payload.date) return res.status(400).json({ error: 'date is required' })
+    const doc = await Record.create(payload)
+    res.json(doc)
+  } catch (e) { next(e) }
 })
 
 // 更新
-router.put('/:id', async (req, res) => {
-  const b = req.body || {}
-  const doc = await InRecord.findByIdAndUpdate(
-    req.params.id,
-    {
-      item: norm(b.item),
-      quantity: Number(b.quantity || 0),
-      price: Number(b.price || 0),
-      note: norm(b.note || ''),
-      date: norm(b.date)
-    },
-    { new: true }
-  )
-  res.json(doc)
+router.put('/:id', async (req, res, next) => {
+  try {
+    const update = {
+      item: req.body.item == null ? undefined : String(req.body.item).trim(),
+      quantity: req.body.quantity == null ? undefined : Number(req.body.quantity),
+      price: req.body.price == null ? undefined : Number(req.body.price),
+      note: req.body.note == null ? undefined : String(req.body.note),
+      date: req.body.date == null ? undefined : String(req.body.date)
+    }
+    const doc = await Record.findByIdAndUpdate(req.params.id, update, { new: true })
+    res.json(doc)
+  } catch (e) { next(e) }
 })
 
 // 刪除
-router.delete('/:id', async (req, res) => {
-  await InRecord.findByIdAndDelete(req.params.id)
-  res.json({ ok: true })
+router.delete('/:id', async (req, res, next) => {
+  try {
+    await Record.findByIdAndDelete(req.params.id)
+    res.json({ ok: true })
+  } catch (e) { next(e) }
 })
 
 export default router
