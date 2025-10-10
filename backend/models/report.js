@@ -3,14 +3,17 @@ const ReportSchema = new mongoose.Schema(
   {
     date: { type: String, required: true, unique: true }, // YYYY-MM-DD
     items: [{ item: { type: String, required: true, trim: true }, qty: { type: Number, required: true, min: 0 } }],
+
+    // 四費
     stallFee: { type: Number, default: 0 },
     parkingFee: { type: Number, default: 0 },
     treatFee: { type: Number, default: 0 },
     personnelFee: { type: Number, default: 0 },
 
-    // 快取欄位（不含成本）
-    revenueOfDay: { type: Number, default: 0 },
-    netProfit: { type: Number, default: 0 } // = revenueOfDay - 四費用
+    // 快取欄位
+    revenueOfDay: { type: Number, default: 0 }, // Σ(份數×售價)
+    costOfDay: { type: Number, default: 0 },    // Σ(份數×耗材成本)
+    netProfit: { type: Number, default: 0 }     // revenue - cost - 四費
   },
   { timestamps: true }
 )

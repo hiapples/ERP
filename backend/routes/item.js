@@ -14,6 +14,7 @@ router.post('/', async (req, res, next) => {
     const body = {
       name: String(req.body.name || '').trim(),
       salePrice: Number(req.body.salePrice || 0),
+      consumableCost: Number(req.body.consumableCost || 0),
       type: 'product'
     }
     if (!body.name) return res.status(400).json({ error: 'name is required' })
@@ -26,7 +27,8 @@ router.put('/:id', async (req, res, next) => {
   try {
     const update = {
       name: req.body.name == null ? undefined : String(req.body.name).trim(),
-      salePrice: req.body.salePrice == null ? undefined : Number(req.body.salePrice)
+      salePrice: req.body.salePrice == null ? undefined : Number(req.body.salePrice),
+      consumableCost: req.body.consumableCost == null ? undefined : Number(req.body.consumableCost)
     }
     const doc = await Item.findByIdAndUpdate(req.params.id, update, { new: true })
     res.json(doc)

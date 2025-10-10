@@ -4,19 +4,24 @@ import Item from '../models/item.js'
 
 const router = Router()
 
-async function computeRevenue(itemsRows) {
+async function computeTotals(itemsRows) {
   const names = Array.from(new Set((itemsRows || []).map(r => String(r.item || ''))))
   const priceMap = {}
+  const consMap  = {}
   if (names.length) {
     const docs = await Item.find({ name: { $in: names } }).lean()
-    for (const d of docs) priceMap[d.name] = Number(d.salePrice || 0)
+    for (const d of docs) {
+      priceMap[d.name] = Number(d.salePrice || 0)
+      consMap[d.name]  = Number(d.consumableCost || 0)
+    }
   }
-  let revenue = 0
+  let revenue = 0, cost = 0
   for (const r of (itemsRows || [])) {
-    const price = priceMap[String(r.item)] || 0
-    revenue += Number(r.qty || 0) * price
+    const qty = Number(r.qty || 0)
+    revenue += qty * (priceMap[r.item] || 0)
+    cost    += qty * (consMap[r.item]  || 0)
   }
-  return revenue
+  return { revenueOfDay: revenue, costOfDay: cost }
 }
 
 router.get('/', async (req, res, next) => {
@@ -39,7 +44,10 @@ router.post('/', async (req, res, next) => {
   try {
     const payload = {
       date: String(req.body.date || ''),
-      items: Array.isArray(req.body.items) ? req.body.items.map(x => ({ item: String(x.item || '').trim(), qty: Number(x.qty || 0) })) : [],
+      items: Array.isArray(req.body.items) ? req.body.items.map(x => ({
+        item: String(x.item || '').trim(),
+        qty: Number(x.qty || 0)
+      })) : [],
       stallFee: Number(req.body.stallFee || 0),
       parkingFee: Number(req.body.parkingFee || 0),
       treatFee: Number(req.body.treatFee || 0),
@@ -47,12 +55,12 @@ router.post('/', async (req, res, next) => {
     }
     if (!payload.date) return res.status(400).json({ error: 'date is required' })
 
-    const revenueOfDay = await computeRevenue(payload.items)
-    const netProfit = revenueOfDay - payload.stallFee - payload.parkingFee - payload.treatFee - payload.personnelFee
+    const { revenueOfDay, costOfDay } = await computeTotals(payload.items)
+    const netProfit = revenueOfDay - costOfDay - payload.stallFee - payload.parkingFee - payload.treatFee - payload.personnelFee
 
     const doc = await Report.findOneAndUpdate(
       { date: payload.date },
-      { ...payload, revenueOfDay, netProfit },
+      { ...payload, revenueOfDay, costOfDay, netProfit },
       { upsert: true, new: true }
     )
     res.json(doc)
