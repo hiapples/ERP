@@ -550,7 +550,7 @@ watch(currentPage4, async (p) => {
               <tbody>
                 <tr v-for="(r, idx) in itemSummary" :key="idx">
                   <td>{{ r.item }}</td>
-                  <td>{{ Number(r.quantity) }}</td>
+                  <td>{{ Number(r.quantity).toFixed(2) }}</td>
                 </tr>
               </tbody>
             </table>
