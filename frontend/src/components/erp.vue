@@ -541,7 +541,7 @@ watch(currentPage4, async (p) => {
       </div>
 
       <div v-if="currentPageStock === 'one-1'" class="form-wrapper">
-        <h5 class="title">庫存總覽（成品）</h5>
+        <h5 class="title">庫存總覽</h5>
         <div v-if="isLoading" style="font-size:14px;color:#888;">載入中...</div>
         <div v-else>
           <div v-if="itemSummary.length > 0" style="font-size:14px;">
@@ -550,7 +550,7 @@ watch(currentPage4, async (p) => {
               <tbody>
                 <tr v-for="(r, idx) in itemSummary" :key="idx">
                   <td>{{ r.item }}</td>
-                  <td>{{ Number(r.quantity).toFixed(2) }}</td>
+                  <td>{{ Number(r.quantity) }}</td>
                 </tr>
               </tbody>
             </table>
