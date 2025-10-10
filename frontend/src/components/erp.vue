@@ -695,7 +695,7 @@ watch(currentPage4, async (p) => {
 
       <!-- 庫存總覽（成品） -->
       <div v-if="currentPageStock === 'one-1'" class="form-wrapper">
-        <h5 class="title">庫存總覽（成品）</h5>
+        <h5 class="title">庫存總覽</h5>
         <div v-if="isLoading" style="font-size:14px;color:#888;">載入中...</div>
         <div v-else>
           <div v-if="itemSummary.length > 0" style="font-size:14px;">
@@ -724,7 +724,7 @@ watch(currentPage4, async (p) => {
             <tr>
               <th>成品名稱</th>
               <th>售價</th>
-              <th>耗材</th>
+              <th>成本</th>
               <th></th>
             </tr>
           </thead>
@@ -756,7 +756,7 @@ watch(currentPage4, async (p) => {
             <tr>
               <td><input placeholder="新成品名稱" v-model="newProduct.name" /></td>
               <td><input type="number" step="0.01" min="0" placeholder="售價" v-model.number="newProduct.salePrice" /></td>
-              <td><input type="number" step="0.01" min="0" placeholder="耗材" v-model.number="newProduct.consumableCost" /></td>
+              <td><input type="number" step="0.01" min="0" placeholder="成本" v-model.number="newProduct.consumableCost" /></td>
               <td class="text-center"><button class="update-btn" @click="addProductItem">新增</button></td>
             </tr>
           </tbody>
