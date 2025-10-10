@@ -562,7 +562,7 @@ watch(currentPage4, async (p) => {
       <!-- 成品設定（含耗材成本） -->
       <div v-else-if="currentPageStock === 'two-2'" class="form-wrapper">
         <h5 class="title">成品設定</h5>
-        <table class="table product-table">
+        <table class="table product-table ms-5">
           <thead>
             <tr>
               <th>成品名稱</th>
