@@ -1,9 +1,7 @@
 import { Router } from 'express'
 import Record from '../models/in.js'
-
 const router = Router()
 
-// 查詢：支援 ?date=YYYY-MM-DD & ?item=成品名
 router.get('/', async (req, res, next) => {
   try {
     const q = {}
@@ -14,13 +12,11 @@ router.get('/', async (req, res, next) => {
   } catch (e) { next(e) }
 })
 
-// 建立
 router.post('/', async (req, res, next) => {
   try {
     const payload = {
       item: String(req.body.item || '').trim(),
       quantity: Number(req.body.quantity || 0),
-      price: Number(req.body.price || 0),
       note: String(req.body.note || ''),
       date: String(req.body.date || '')
     }
@@ -31,13 +27,11 @@ router.post('/', async (req, res, next) => {
   } catch (e) { next(e) }
 })
 
-// 更新
 router.put('/:id', async (req, res, next) => {
   try {
     const update = {
       item: req.body.item == null ? undefined : String(req.body.item).trim(),
       quantity: req.body.quantity == null ? undefined : Number(req.body.quantity),
-      price: req.body.price == null ? undefined : Number(req.body.price),
       note: req.body.note == null ? undefined : String(req.body.note),
       date: req.body.date == null ? undefined : String(req.body.date)
     }
@@ -46,7 +40,6 @@ router.put('/:id', async (req, res, next) => {
   } catch (e) { next(e) }
 })
 
-// 刪除
 router.delete('/:id', async (req, res, next) => {
   try {
     await Record.findByIdAndDelete(req.params.id)

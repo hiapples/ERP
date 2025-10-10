@@ -20,7 +20,7 @@ const selectedDate3 = ref(today)
 const selectedDate4 = ref('')
 const selectedDate5 = ref(today)
 
-// 清單（統一用成品）
+// 清單（統一用成品；不含任何金額欄位）
 const recordList = ref([])   // 入庫（成品）
 const recordList2 = ref([])  // 出庫（成品）
 const isLoading = ref(false)
@@ -29,17 +29,10 @@ const isLoading = ref(false)
 const items = ref([])
 
 // ====== 共用小工具 ======
-const totalCostWithFees = (r) =>
-  Number(r?.costOfDay || 0)
-  + Number(r?.stallFee || 0)
-  + Number(r?.parkingFee || 0)
-  + Number(r?.treatFee || 0)
-  + Number(r?.personnelFee || 0)
-
 const norm = (v) => (v == null ? '' : String(v).trim())
 const _arr = (v) => (Array.isArray(v) ? v : (Array.isArray(v?.items) ? v.items : []))
 
-// 僅保留成品（不顯示原料）
+// 僅保留成品
 const productItems = computed(() => {
   const arr = _arr(items.value).filter(i => i?.type === 'product')
   return arr.slice().sort((a, b) => {
@@ -53,25 +46,21 @@ const productItems = computed(() => {
 const inOptions  = computed(() => productItems.value.map(i => i?.name).filter(Boolean))
 const outOptions = computed(() => productItems.value.map(i => i?.name).filter(Boolean))
 
-// 單筆輸入（成品）
-const inRow  = ref({ item: '', quantity: '', price: '', note: '' })  // 成品入庫（數量單位自定）
-const outRow = ref({ item: '', quantity: '', note: '' })             // 成品出庫（銷售出庫）
-const outUnitPrice = ref('') // 該成品平均單價（唯讀顯示）
+// 單筆輸入（成品；無金額）
+const inRow  = ref({ item: '', quantity: '', note: '' })  // 成品入庫
+const outRow = ref({ item: '', quantity: '', note: '' })  // 成品出庫
 
 const editingId = ref(null)
-const selectedItem  = ref('') // 入庫查詢用（成品）
-const selectedItem2 = ref('') // 出庫查詢用（成品）
+const selectedItem  = ref('') // 入庫查詢用
+const selectedItem2 = ref('') // 出庫查詢用
 
 // === 入/出庫共用 ===
 const isEmpty = (v) => v === '' || v === null || v === undefined
-const isRowCompleteIn = (row) =>
-  !!row.item && !isEmpty(row.quantity) && Number(row.quantity) > 0 &&
-  !isEmpty(row.price) && Number(row.price) >= 0
-const isRowCompleteOut = (row) =>
-  !!row.item && !isEmpty(row.quantity) && Number(row.quantity) > 0
+const isRowCompleteIn = (row) => !!row.item && !isEmpty(row.quantity) && Number(row.quantity) > 0
+const isRowCompleteOut = (row) => !!row.item && !isEmpty(row.quantity) && Number(row.quantity) > 0
 
-function clearIn () { inRow.value = { item: '', quantity: '', price: '', note: '' } }
-function clearOut () { outRow.value = { item: '', quantity: '', note: '' }; outUnitPrice.value = '' }
+function clearIn () { inRow.value = { item: '', quantity: '', note: '' } }
+function clearOut () { outRow.value = { item: '', quantity: '', note: '' } }
 
 // === 讀取品項 ===
 async function fetchItems () {
@@ -79,7 +68,7 @@ async function fetchItems () {
   items.value = _arr(res?.data)
 }
 
-// === 入庫/出庫資料讀取（皆為成品） ===
+// === 入庫/出庫資料讀取（皆為成品；無金額） ===
 const _arrData = (data) => (Array.isArray(data) ? data : (Array.isArray(data?.items) ? data.items : []))
 
 const fetchRecords = async () => {
@@ -137,128 +126,64 @@ const recordList2Filtered = computed(() => {
   })
 })
 
-// === 平均成本&庫存彙總（成品；用入/出庫） ===
+// === 庫存彙總（只計數量；無平均單價/總價） ===
 const itemSummary = computed(() => {
   const summary = []
-  const names = inOptions.value // 全部成品名
+  const names = inOptions.value
   for (const prodName of names) {
     const key = norm(prodName)
-    const inRecords  = recordList.value.filter(r => norm(r?.item) === key)
-    const outRecords = recordList2.value.filter(r => norm(r?.item) === key)
-
-    const inQty      = inRecords.reduce((s, r) => s + Number(r?.quantity || 0), 0)
-    const inSumPrice = inRecords.reduce((s, r) => s + Number(r?.price || 0), 0)
-
-    const outQty     = outRecords.reduce((s, r) => s + Number(r?.quantity || 0), 0)
-    const outSum     = outRecords.reduce((s, r) => s + Number(r?.price || 0), 0)
-
-    const stockQty        = inQty - outQty
-    const stockTotalPrice = inSumPrice - outSum
-    const avgPrice        = stockQty > 0 ? (stockTotalPrice / stockQty) : 0
-
-    summary.push({
-      item: prodName,
-      quantity: stockQty,
-      avgPrice,
-      totalPrice: stockTotalPrice
-    })
+    const inQty  = recordList.value.filter(r => norm(r?.item) === key).reduce((s, r) => s + Number(r?.quantity || 0), 0)
+    const outQty = recordList2.value.filter(r => norm(r?.item) === key).reduce((s, r) => s + Number(r?.quantity || 0), 0)
+    const stockQty = inQty - outQty
+    summary.push({ item: prodName, quantity: stockQty })
   }
   return summary
 })
 
-const getAvgPrice = (prodName) => {
-  const n = norm(prodName)
-  const row = itemSummary.value.find(i => norm(i.item) === n)
-  return row ? row.avgPrice : 0
-}
-
-// 出庫選擇或資料更新時，自動帶入平均單價
-function autoFillOutUnitPrice() {
-  if (outRow.value.item) outUnitPrice.value = Number(getAvgPrice(outRow.value.item).toFixed(2))
-  else outUnitPrice.value = ''
-}
-watch(() => outRow.value.item, autoFillOutUnitPrice)
-watch([recordList, recordList2], autoFillOutUnitPrice, { deep: true })
-
-// === 出庫時檢查庫存（成品扣庫） ===
+// === 出庫時檢查庫存（只比數量） ===
 function checkOutStock () {
   const row = outRow.value
   if (!row.item || !row.quantity) return true
-
-  const name = row.item
-  const needQty = Number(row.quantity)
-
-  const key = norm(name)
-  const inQty = recordList.value
-    .filter(r => norm(r?.item) === key)
-    .reduce((s, r) => s + Number(r?.quantity || 0), 0)
-
-  const outQty = recordList2.value
-    .filter(r => norm(r?.item) === key)
-    .reduce((s, r) => s + Number(r?.quantity || 0), 0)
-
+  const key = norm(row.item)
+  const inQty  = recordList.value.filter(r => norm(r?.item) === key).reduce((s, r) => s + Number(r?.quantity || 0), 0)
+  const outQty = recordList2.value.filter(r => norm(r?.item) === key).reduce((s, r) => s + Number(r?.quantity || 0), 0)
   const left = inQty - outQty
-  if (needQty > left + 1e-9) {
-    alert(`❌【${name}】庫存不足，需要 ${needQty.toFixed(2)}，現有 ${left.toFixed(2)}`)
+  if (Number(row.quantity) > left + 1e-9) {
+    alert(`❌【${row.item}】庫存不足，需要 ${Number(row.quantity).toFixed(2)}，現有 ${left.toFixed(2)}`)
     return false
   }
   return true
 }
 
-// === 送出入庫（成品） ===
+// === 送出入庫（無金額） ===
 const submitIn = async () => {
   const row = inRow.value
   if (!selectedDate.value) { alert('❌ 請選擇日期'); return }
-  if (!isRowCompleteIn(row)) { alert('❌ 入庫：品項/數量/價格需填寫（數量>0，價格可為0）'); return }
-
+  if (!isRowCompleteIn(row)) { alert('❌ 入庫：品項/數量需填（數量>0）'); return }
   try {
-    const payload = {
-      item: row.item,
-      quantity: Number(row.quantity),
-      price: Number(Number(row.price).toFixed(2)), // 整筆入庫總成本
-      note: row.note || '',
-      date: selectedDate.value
-    }
+    const payload = { item: row.item, quantity: Number(row.quantity), note: row.note || '', date: selectedDate.value }
     await axios.post(API + '/records', payload)
     alert('✅ 入庫成功')
     await fetchRecords3()
     clearIn()
-  } catch (err) {
-    alert('❌ 發送失敗：' + err.message)
-  }
+  } catch (err) { alert('❌ 發送失敗：' + err.message) }
 }
 
-// === 送出出庫（成品；平均單價帶該成品平均） ===
+// === 送出出庫（無金額） ===
 const submitOut = async () => {
   const row = outRow.value
   if (!selectedDate3.value) { alert('❌ 請選擇日期'); return }
   if (!isRowCompleteOut(row)) { alert('❌ 出庫：品項/數量需填（數量>0）'); return }
   if (!checkOutStock()) return
-
   try {
-    const name      = row.item
-    const qty       = Number(Number(row.quantity).toFixed(2)) // 成品扣量（出庫數量）
-    const unit      = Number(getAvgPrice(name))               // 成品平均單價（存貨成本）
-    const lineTotal = Number((unit * qty).toFixed(2))         // 出庫成本金額
-
-    const payload = {
-      item: name,
-      quantity: qty,
-      price: lineTotal,   // 記錄成本（若要記錄銷售收入，建議另建 /sales）
-      note: row.note || '',
-      date: selectedDate3.value
-    }
+    const payload = { item: row.item, quantity: Number(Number(row.quantity).toFixed(2)), note: row.note || '', date: selectedDate3.value }
     await axios.post(API + '/outrecords', payload)
     alert('✅ 出庫成功（已從成品扣庫）')
-
     await fetchRecords3()
     if (selectedDate5.value !== selectedDate3.value) selectedDate5.value = selectedDate3.value
     await fetchReportOfDate()
     clearOut()
-
-  } catch (err) {
-    alert('❌ 發送失敗：' + err.message)
-  }
+  } catch (err) { alert('❌ 發送失敗：' + err.message) }
 }
 
 // === 入/出庫列表編修 ===
@@ -271,9 +196,7 @@ const confirmEdit = async () => {
     await axios.put(API + '/records/' + editingId.value, rec)
     editingId.value = null
     await fetchRecords()
-  } catch (err) {
-    alert('❌ 更新失敗：' + err.message)
-  }
+  } catch (err) { alert('❌ 更新失敗：' + err.message) }
 }
 const confirmEdit2 = async () => {
   const rec = recordList2.value.find(r => r?._id === editingId.value)
@@ -282,9 +205,7 @@ const confirmEdit2 = async () => {
     editingId.value = null
     await fetchRecords2()
     await fetchReportOfDate()
-  } catch (err) {
-    alert('❌ 更新失敗：' + err.message)
-  }
+  } catch (err) { alert('❌ 更新失敗：' + err.message) }
 }
 const deleteRecord = async (id) => {
   if (!confirm('❌ 確定要刪除這筆資料嗎？')) return
@@ -293,73 +214,44 @@ const deleteRecord = async (id) => {
 }
 const deleteRecord2 = async (id) => {
   if (!confirm('❌ 確定要刪除這筆資料嗎？')) return
-  try {
-    await axios.delete(API + '/outrecords/' + id)
-    await fetchRecords2()
-    await fetchReportOfDate()
-  } catch (err) {
-    alert('❌ 刪除失敗：' + err.message)
-  }
+  try { await axios.delete(API + '/outrecords/' + id); await fetchRecords2(); await fetchReportOfDate() }
+  catch (err) { alert('❌ 刪除失敗：' + err.message) }
 }
 
-// === 成品設定（耗材保留；售價保留） ===
+// === 成品設定（只需名稱與售價；不再用耗材成本） ===
 const itemEditingId = ref(null)
-const newProduct = ref({ name: '', salePrice: '', consumableCost: '' })
+const newProduct = ref({ name: '', salePrice: '' })
 
 const addProductItem = async () => {
   if (!newProduct.value.name) { alert('請輸入成品名稱'); return }
   try {
-    await axios.post(API + '/items', {
-      name: norm(newProduct.value.name),
-      salePrice: Number(newProduct.value.salePrice || 0),
-      type: 'product',
-      consumableCost: Number(newProduct.value.consumableCost || 0)
-    })
-    newProduct.value = { name: '', salePrice: '', consumableCost: '' }
+    await axios.post(API + '/items', { name: norm(newProduct.value.name), salePrice: Number(newProduct.value.salePrice || 0), type: 'product' })
+    newProduct.value = { name: '', salePrice: '' }
     await fetchItems()
-  } catch (e) {
-    alert('新增失敗：' + e.message)
-  }
+  } catch (e) { alert('新增失敗：' + e.message) }
 }
 const startEditItem = (id) => { itemEditingId.value = id }
 const confirmEditItem = async (it) => {
   try {
-    const body = {
-      name: norm(it.name),
-      salePrice: Number(it.salePrice || 0),
-      consumableCost: Number(it.consumableCost || 0)
-    }
+    const body = { name: norm(it.name), salePrice: Number(it.salePrice || 0) }
     await axios.put(API + '/items/' + it._id, body)
     itemEditingId.value = null
     await fetchItems()
-  } catch (e) {
-    alert('更新失敗：' + e.message)
-  }
+  } catch (e) { alert('更新失敗：' + e.message) }
 }
 const deleteItem = async (id) => {
   if (!confirm('確定刪除該品項？')) return
-  try {
-    await axios.delete(API + '/items/' + id)
-    await fetchItems()
-  } catch (e) {
-    alert('刪除失敗：' + (e?.message || ''))
-  }
+  try { await axios.delete(API + '/items/' + id); await fetchItems() }
+  catch (e) { alert('刪除失敗：' + (e?.message || '')) }
 }
 
-// === 報表（只顯示成品；成本=份數×耗材；不再顯示原料列） ===
+// === 報表（不顯示成本；僅顯示營收與四費用；淨利=營收-四費用） ===
 const reportQty = ref({})        // { [productName]: qty }
 
 const stallFee = ref('')        // 攤販費
 const parkingFee = ref('')      // 停車費
-const treatFee = ref('')        // 請客費
+const treatFee = ref('')        // 註：仍保留
 const personnelFee = ref('')    // 人事費
-
-// 成品名 → 每份耗材成本
-const consumableMap = computed(() => {
-  const m = {}
-  for (const it of productItems.value) m[it.name] = Number(it.consumableCost || 0)
-  return m
-})
 
 // 套用某日報表資料
 function applyReportToForm(r) {
@@ -372,45 +264,32 @@ function applyReportToForm(r) {
     }
   }
   reportQty.value = map
-
-  // 四費用（保險費、公會費已移除）
   stallFee.value     = Number((r?.stallFee ?? 0) || 0)
   parkingFee.value   = Number((r?.parkingFee ?? 0) || 0)
   treatFee.value     = Number((r?.treatFee ?? 0) || 0)
   personnelFee.value = Number((r?.personnelFee ?? 0) || 0)
 }
 
-// 取得某日已存的報表（不讀原料成本）
+// 取得某日已存的報表
 const fetchReportOfDate = async () => {
   if (!selectedDate5.value) return
   try {
     const { data } = await axios.get(API + '/reports/' + selectedDate5.value)
     if (data) applyReportToForm(data)
     else {
-      const map = {}
-      for (const it of productItems.value) map[it.name] = ''
+      const map = {}; for (const it of productItems.value) map[it.name] = ''
       reportQty.value = map
       stallFee.value = parkingFee.value = treatFee.value = personnelFee.value = ''
     }
   } catch {
-    const map = {}
-    for (const it of productItems.value) map[it.name] = ''
+    const map = {}; for (const it of productItems.value) map[it.name] = ''
     reportQty.value = map
     stallFee.value = parkingFee.value = treatFee.value = personnelFee.value = ''
   }
 }
 
-// 品項變動時，同步報表可填 key（只對成品，預設空值不是 0）
-watch(items, () => {
-  const map = { ...reportQty.value }
-  for (const it of productItems.value) if (!(it.name in map)) map[it.name] = ''
-  for (const k of Object.keys(map)) if (!productItems.value.find(i => i.name === k)) delete map[k]
-  reportQty.value = map
-}, { deep: true })
-
 // 報表表格資料（只有成品）
 const reportTableItems = computed(() => productItems.value.map(p => ({ ...p, _kind: 'product' })))
-const isProduct = (it) => it?._kind === 'product'
 
 // 營業收入（只有成品）
 const perProductRevenue = (it) => {
@@ -419,15 +298,7 @@ const perProductRevenue = (it) => {
   return (q * Number(it.salePrice || 0)).toFixed(0)
 }
 
-// 成本 = 份數 × 耗材成本
-const productRowCost = (it) => {
-  const qty = Number(reportQty.value[it.name] || 0)
-  if (!qty) return ''
-  const extra = qty * Number(consumableMap.value[it.name] || 0)
-  return extra.toFixed(2)
-}
-
-// 合計（收入 & 成本）
+// 合計（只有營收）
 const revenueTotal = computed(() => {
   let sum = 0
   for (const it of productItems.value) {
@@ -437,59 +308,34 @@ const revenueTotal = computed(() => {
   return sum
 })
 
-// 成品耗材總額（唯一定義的成本）
-const extraConsumableTotal = computed(() =>
-  productItems.value.reduce((s, it) =>
-    s + Number(reportQty.value[it.name] || 0) * Number(consumableMap.value[it.name] || 0), 0)
-)
-
-// 總成本 = Σ(成品份數 × 耗材成本)
-const costTotal = computed(() => extraConsumableTotal.value)
-
-// 淨利 = 收入 - 成本 - 四費用
+// 淨利（無成本）：= 營收 - 四費用
 const netProfit = computed(() =>
   revenueTotal.value
-  - costTotal.value
   - Number(stallFee.value || 0)
   - Number(parkingFee.value || 0)
   - Number(treatFee.value || 0)
   - Number(personnelFee.value || 0)
 )
 
-// 送出報表（只送成品份數；成本由前端顯示，後端可自行重算）
+// 送出報表（只送成品份數與四費用）
 const submitReport = async () => {
   if (!selectedDate5.value) { alert('❌ 請先選擇報表日期'); return }
-
-  // 1) 份數一律要填（空白不行，0 可以）
   const unfilled = productItems.value.filter(it => isEmpty(reportQty.value[it.name]))
-  if (unfilled.length > 0) {
-    alert('❌ 以下成品的「份數」尚未填寫（可填 0）：\n' + unfilled.map(i => `• ${i.name}`).join('\n'))
-    return
-  }
-
-  // 2) 四費用必填（0 可）
+  if (unfilled.length > 0) { alert('❌ 以下成品的「份數」尚未填寫（可填 0）：\n' + unfilled.map(i => `• ${i.name}`).join('\n')); return }
   if (isEmpty(stallFee.value) || isEmpty(parkingFee.value) || isEmpty(treatFee.value) || isEmpty(personnelFee.value)) {
     alert('❌ 請填寫「攤販費 / 停車費 / 請客費 / 人事費」（可填 0）')
     return
   }
-
   const payload = {
     date: selectedDate5.value,
     items: productItems.value.map(it => ({ item: it.name, qty: Number(reportQty.value[it.name] || 0) })),
     stallFee: Number(stallFee.value || 0),
     parkingFee: Number(parkingFee.value || 0),
     treatFee: Number(treatFee.value || 0),
-    personnelFee: Number(personnelFee.value || 0),
-    netProfit: Number(netProfit.value || 0)
+    personnelFee: Number(personnelFee.value || 0)
   }
-
-  try {
-    await axios.post(API + '/reports', payload)
-    alert('✅ 報表已送出')
-    await fetchReportsList()
-  } catch (err) {
-    alert('❌ 報表傳送失敗：' + err.message)
-  }
+  try { await axios.post(API + '/reports', payload); alert('✅ 報表已送出'); await fetchReportsList() }
+  catch (err) { alert('❌ 報表傳送失敗：' + err.message) }
 }
 
 // 報表總攬
@@ -501,20 +347,13 @@ async function fetchReportsList () {
     const { data } = await axios.get(API + '/reports')
     const arr = _arr(data) || []
     reportList.value = (arr || []).sort((a, b) => (b?.date || '').localeCompare(a?.date || ''))
-  } finally {
-    isReportsLoading.value = false
-  }
+  } finally { isReportsLoading.value = false }
 }
 const deleteReportByDate = async (dateStr) => {
   if (!dateStr) return
   if (!confirm(`❌ 確定要清除 ${dateStr} 的報表資料嗎？`)) return
-  try {
-    await axios.delete(API + '/reports/' + encodeURIComponent(dateStr))
-    alert('✅ 已清除該日報表資料')
-    await fetchReportsList()
-  } catch (e) {
-    alert('❌ 清除失敗：' + (e?.message || ''))
-  }
+  try { await axios.delete(API + '/reports/' + encodeURIComponent(dateStr)); alert('✅ 已清除該日報表資料'); await fetchReportsList() }
+  catch (e) { alert('❌ 清除失敗：' + (e?.message || '')) }
 }
 
 // === 掛載/監聽 ===
@@ -525,18 +364,14 @@ onMounted(async () => {
   else { await fetchRecords() }
 })
 
-watch(
-  [selectedDate, selectedDate2, selectedDate3, selectedDate4, selectedDate5, selectedItem, selectedItem2, currentPage, currentPageStock],
-  async () => {
-    if (currentPage.value === 'two' || currentPage.value === 'three') await fetchRecords3()
-    else if (currentPage.value === 'four') {
-      await fetchReportOfDate()
-    } else {
-      await fetchRecords()
-    }
-  },
-  { immediate: false }
-)
+watch([
+  selectedDate, selectedDate2, selectedDate3, selectedDate4, selectedDate5,
+  selectedItem, selectedItem2, currentPage, currentPageStock
+], async () => {
+  if (currentPage.value === 'two' || currentPage.value === 'three') await fetchRecords3()
+  else if (currentPage.value === 'four') { await fetchReportOfDate() }
+  else { await fetchRecords() }
+}, { immediate: false })
 
 watch(currentPage4, async (p) => {
   if (currentPage.value === 'four' && p === 'two-2') await fetchReportsList()
@@ -553,7 +388,7 @@ watch(currentPage4, async (p) => {
   </div>
 
   <div class="page-content mt-4">
-    <!-- 入庫（成品） -->
+    <!-- 入庫（成品；無金額） -->
     <div v-if="currentPage === 'one'">
       <div v-if="currentPage2 === 'one-1'">
         <div class="d-flex justify-content-center align-items-center">
@@ -570,7 +405,7 @@ watch(currentPage4, async (p) => {
           </div>
 
           <table>
-            <thead><tr><th></th><th>成品</th><th>數量</th><th>整筆成本</th><th>備註</th></tr></thead>
+            <thead><tr><th></th><th>成品</th><th>數量</th><th>備註</th></tr></thead>
             <tbody>
               <tr>
                 <td><div class="clear" @click="clearIn" type="button">空</div></td>
@@ -580,7 +415,6 @@ watch(currentPage4, async (p) => {
                   </select>
                 </td>
                 <td><input type="number" class="qty"   v-model.number="inRow.quantity" min="0.01" step="0.01" /></td>
-                <td><input type="number" class="price" v-model.number="inRow.price"    min="0"    step="0.01" /></td>
                 <td><input class="note" v-model="inRow.note" /></td>
               </tr>
             </tbody>
@@ -618,7 +452,7 @@ watch(currentPage4, async (p) => {
           </div>
 
           <table>
-            <thead><tr><th></th><th>成品</th><th>數量</th><th>整筆成本</th><th>備註</th><th v-if="!editingId">日期</th></tr></thead>
+            <thead><tr><th></th><th>成品</th><th>數量</th><th>備註</th><th v-if="!editingId">日期</th></tr></thead>
             <tbody>
               <tr v-for="record in recordList" :key="record._id">
                 <td class="button">
@@ -644,11 +478,6 @@ watch(currentPage4, async (p) => {
                   <template v-else>{{ Number(record.quantity).toFixed(2) }}</template>
                 </td>
 
-                <td class="price">
-                  <template v-if="editingId === record._id"><input type="number" v-model.number="record.price" min="0" step="0.01" /></template>
-                  <template v-else>{{ Number(record.price).toFixed(2) }}</template>
-                </td>
-
                 <td class="note">
                   <template v-if="editingId === record._id"><input v-model="record.note" /></template>
                   <template v-else>{{ record.note }}</template>
@@ -670,43 +499,24 @@ watch(currentPage4, async (p) => {
       </div>
     </div>
 
-    <!-- 庫存（只顯示成品） -->
+    <!-- 庫存（只顯示成品；無金額） -->
     <div v-else-if="currentPage === 'two'">
       <div class="d-flex justify-content-center align-items-center">
-        <button
-          v-if="currentPageStock === 'one-1'"
-          style="min-width: 330px;"
-          class="btn mb-3"
-          :class="{ active: currentPageStock === 'two-2' }"
-          @click="() => { currentPageStock = 'two-2'; fetchItems() }"
-        >
-          成品設定
-        </button>
-        <button
-          v-else
-          style="min-width: 330px;"
-          class="btn mb-3"
-          :class="{ active: currentPageStock === 'one-1' }"
-          @click="() => { currentPageStock = 'one-1'; fetchRecords3() }"
-        >
-          庫存總覽
-        </button>
+        <button v-if="currentPageStock === 'one-1'" style="min-width: 330px;" class="btn mb-3" :class="{ active: currentPageStock === 'two-2' }" @click="() => { currentPageStock = 'two-2'; fetchItems() }">成品設定</button>
+        <button v-else style="min-width: 330px;" class="btn mb-3" :class="{ active: currentPageStock === 'one-1' }" @click="() => { currentPageStock = 'one-1'; fetchRecords3() }">庫存總覽</button>
       </div>
 
-      <!-- 庫存總覽（成品） -->
       <div v-if="currentPageStock === 'one-1'" class="form-wrapper">
-        <h5 class="title">庫存總覽</h5>
+        <h5 class="title">庫存總覽（成品）</h5>
         <div v-if="isLoading" style="font-size:14px;color:#888;">載入中...</div>
         <div v-else>
           <div v-if="itemSummary.length > 0" style="font-size:14px;">
             <table class="table">
-              <thead><tr><th>成品</th><th>數量</th><th>平均單價</th><th>總價</th></tr></thead>
+              <thead><tr><th>成品</th><th>數量</th></tr></thead>
               <tbody>
                 <tr v-for="(r, idx) in itemSummary" :key="idx">
                   <td>{{ r.item }}</td>
                   <td>{{ Number(r.quantity).toFixed(2) }}</td>
-                  <td>{{ Number(r.avgPrice).toFixed(2) }}</td>
-                  <td>{{ Number(r.totalPrice).toFixed(2) }}</td>
                 </tr>
               </tbody>
             </table>
@@ -718,13 +528,11 @@ watch(currentPage4, async (p) => {
       <!-- 成品設定 -->
       <div v-else-if="currentPageStock === 'two-2'" class="form-wrapper">
         <h5 class="title">成品設定</h5>
-
         <table class="table product-table">
           <thead>
             <tr>
               <th>成品名稱</th>
               <th>售價</th>
-              <th>成本</th>
               <th></th>
             </tr>
           </thead>
@@ -737,10 +545,6 @@ watch(currentPage4, async (p) => {
               <td style="max-width:120px;">
                 <template v-if="itemEditingId === it._id"><input type="number" step="0.01" min="0" v-model.number="it.salePrice" /></template>
                 <template v-else>{{ Number(it.salePrice || 0).toFixed(2) }}</template>
-              </td>
-              <td style="max-width:120px;">
-                <template v-if="itemEditingId === it._id"><input type="number" step="0.01" min="0" v-model.number="it.consumableCost" /></template>
-                <template v-else>{{ Number(it.consumableCost || 0).toFixed(2) }}</template>
               </td>
               <td class="text-center">
                 <template v-if="itemEditingId === it._id">
@@ -756,7 +560,6 @@ watch(currentPage4, async (p) => {
             <tr>
               <td><input placeholder="新成品名稱" v-model="newProduct.name" /></td>
               <td><input type="number" step="0.01" min="0" placeholder="售價" v-model.number="newProduct.salePrice" /></td>
-              <td><input type="number" step="0.01" min="0" placeholder="成本" v-model.number="newProduct.consumableCost" /></td>
               <td class="text-center"><button class="update-btn" @click="addProductItem">新增</button></td>
             </tr>
           </tbody>
@@ -764,7 +567,7 @@ watch(currentPage4, async (p) => {
       </div>
     </div>
 
-    <!-- 出庫（成品） -->
+    <!-- 出庫（成品；無金額） -->
     <div v-if="currentPage === 'three'">
       <div v-if="currentPage3 === 'one-1'">
         <div class="d-flex justify-content-center align-items-center">
@@ -781,7 +584,7 @@ watch(currentPage4, async (p) => {
           </div>
 
           <table>
-            <thead><tr><th></th><th>成品</th><th>數量</th><th>平均單價</th><th>備註</th></tr></thead>
+            <thead><tr><th></th><th>成品</th><th>數量</th><th>備註</th></tr></thead>
             <tbody>
               <tr>
                 <td><div type="button" class="clear" @click="clearOut">空</div></td>
@@ -791,7 +594,6 @@ watch(currentPage4, async (p) => {
                   </select>
                 </td>
                 <td><input type="number" class="qty" v-model.number="outRow.quantity" min="0.01" step="0.01" /></td>
-                <td><input type="number" class="price" :value="outUnitPrice" disabled /></td>
                 <td><input class="note" v-model="outRow.note" /></td>
               </tr>
             </tbody>
@@ -828,7 +630,7 @@ watch(currentPage4, async (p) => {
           </div>
 
           <table>
-            <thead><tr><th></th><th>成品</th><th>數量</th><th>整筆成本</th><th>備註</th><th v-if="!editingId">日期</th></tr></thead>
+            <thead><tr><th></th><th>成品</th><th>數量</th><th>備註</th><th v-if="!editingId">日期</th></tr></thead>
             <tbody>
               <tr v-for="record in recordList2Filtered" :key="record._id">
                 <td class="button">
@@ -854,11 +656,6 @@ watch(currentPage4, async (p) => {
                   <template v-else>{{ Number(record.quantity).toFixed(2) }}</template>
                 </td>
 
-                <td class="price">
-                  <template v-if="editingId === record._id"><input type="number" v-model.number="record.price" min="0" step="0.01" /></template>
-                  <template v-else>{{ Number(record.price).toFixed(2) }}</template>
-                </td>
-
                 <td class="note">
                   <template v-if="editingId === record._id"><input v-model="record.note" /></template>
                   <template v-else>{{ record.note }}</template>
@@ -878,7 +675,7 @@ watch(currentPage4, async (p) => {
       </div>
     </div>
 
-    <!-- 報表（只顯示成品；成本=份數×耗材） -->
+    <!-- 報表（只顯示營收與四費用） -->
     <div v-if="currentPage === 'four'">
       <div v-if="currentPage4 === 'one-1'">
         <div class="d-flex justify-content-center align-items-center">
@@ -891,72 +688,40 @@ watch(currentPage4, async (p) => {
           <div class="d-flex justify-content-center mt-3">
             <div class="d-flex align-items-center gap-3 mb-3" style="width:100%;max-width:330px;">
               <div style="font-size:14px;white-space:nowrap;">日期&ensp;:</div>
-              <input
-                type="date"
-                v-model="selectedDate5"
-                class="form-control"
-                style="min-height:42px;flex:1;"
-                @change="() => { fetchReportOfDate() }"
-              />
+              <input type="date" v-model="selectedDate5" class="form-control" style="min-height:42px;flex:1;" @change="() => { fetchReportOfDate() }" />
             </div>
           </div>
 
-          <!-- 單表：僅成品 -->
           <table class="text-center align-middle">
-            <thead><tr><th>成品</th><th>份數 × 售價</th><th>營業收入</th><th>銷貨成本</th></tr></thead>
+            <thead><tr><th>成品</th><th>份數 × 售價</th><th>營業收入</th></tr></thead>
             <tbody>
-              <tr v-for="it in reportTableItems" :key="it._id + (it._kind || '')">
+              <tr v-for="it in reportTableItems" :key="it._id">
                 <td>{{ it.name }}</td>
-
                 <td class="d-flex justify-content-center align-items-center gap-2">
-                  <template v-if="isProduct(it)">
-                    <input v-model.number="reportQty[it.name]" type="number" min="0" step="1" class="form-control text-center report" style="display:inline-block;" />
-                    <span>× {{ Number(it.salePrice || 0).toFixed(0) }}</span>
-                  </template>
+                  <input v-model.number="reportQty[it.name]" type="number" min="0" step="1" class="form-control text-center report" style="display:inline-block;" />
+                  <span>× {{ Number(it.salePrice || 0).toFixed(0) }}</span>
                 </td>
-
-                <td>
-                  <template v-if="isProduct(it)">{{ perProductRevenue(it) }}</template>
-                </td>
-
-                <td>
-                  <template v-if="isProduct(it)">{{ productRowCost(it) }}</template>
-                </td>
+                <td>{{ perProductRevenue(it) }}</td>
               </tr>
-
-              <tr><td>&ensp;</td><td>&ensp;</td><td>&ensp;</td><td>&ensp;</td></tr>
-
+              <tr><td>&ensp;</td><td>&ensp;</td><td>&ensp;</td></tr>
               <tr class="total-row">
                 <td>總計</td>
                 <td></td>
                 <td>{{ revenueTotal.toFixed(0) }}</td>
-                <td>{{ costTotal.toFixed(2) }}</td>
               </tr>
             </tbody>
           </table>
 
           <!-- 四格費用 -->
           <div class="fees-grid mt-3">
-            <div class="fee">
-              <label>攤販費：</label>
-              <input v-model.number="stallFee" type="number" min="0" step="1" class="form-control text-center report2" />
-            </div>
-            <div class="fee">
-              <label>停車費：</label>
-              <input v-model.number="parkingFee" type="number" min="0" step="1" class="form-control text-center report2" />
-            </div>
-            <div class="fee">
-              <label>人事費：</label>
-              <input v-model.number="personnelFee" type="number" min="0" step="1" class="form-control text-center report2" />
-            </div>
-            <div class="fee">
-              <label>請客費：</label>
-              <input v-model.number="treatFee" type="number" min="0" step="1" class="form-control text-center report2" />
-            </div>
+            <div class="fee"><label>攤販費：</label><input v-model.number="stallFee" type="number" min="0" step="1" class="form-control text-center report2" /></div>
+            <div class="fee"><label>停車費：</label><input v-model.number="parkingFee" type="number" min="0" step="1" class="form-control text-center report2" /></div>
+            <div class="fee"><label>人事費：</label><input v-model.number="personnelFee" type="number" min="0" step="1" class="form-control text-center report2" /></div>
+            <div class="fee"><label>請客費：</label><input v-model.number="treatFee" type="number" min="0" step="1" class="form-control text-center report2" /></div>
           </div>
           <div class="d-flex justify-content-center align-items-center gap-3 mt-3">
-            <div class="fw-bold">淨利：</div>
-            <div>{{ netProfit.toFixed(2) }}</div>
+            <div class="fw-bold">淨利（無成本）：</div>
+            <div>{{ netProfit.toFixed(0) }}</div>
           </div>
 
           <div class="d-flex justify-content-center mt-3">
@@ -982,8 +747,7 @@ watch(currentPage4, async (p) => {
                   <tr>
                     <th>日期</th>
                     <th>總營收</th>
-                    <th>總成本</th>
-                    <th>淨利</th>
+                    <th>淨利（無成本）</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -991,8 +755,7 @@ watch(currentPage4, async (p) => {
                   <tr v-for="r in reportList" :key="r._id || r.date">
                     <td>{{ r.date }}</td>
                     <td>{{ Number(r.revenueOfDay || 0).toFixed(0) }}</td>
-                    <td>{{ totalCostWithFees(r).toFixed(2) }}</td>
-                    <td>{{ r?.netProfit == null ? '' : Number(r.netProfit).toFixed(2) }}</td>
+                    <td>{{ r?.netProfit == null ? '' : Number(r.netProfit).toFixed(0) }}</td>
                     <td class="text-center"><button class="delete-btn" @click="deleteReportByDate(r.date)">刪</button></td>
                   </tr>
                 </tbody>
@@ -1023,7 +786,7 @@ select { width:100%; border:1px solid #ccc; border-radius:4px; box-sizing:border
 td select, td input { min-height:30px; }
 
 .items{ min-width:80px; }
-.qty, .price, .price-text, .note { min-width:60px; }
+.qty, .note { min-width:60px; }
 .button{ max-width:20px; padding-left:0!important; padding-right:25px!important; }
 
 input[type=number]::-webkit-outer-spin-button,
@@ -1043,30 +806,15 @@ input[type=number]::-webkit-inner-spin-button { -webkit-appearance:none; margin:
 .report-table tbody tr { height:56px; }
 .report-table tbody td { vertical-align:middle; }
 
-/* 成品表格收窄 + 固定欄寬（4 欄：名稱/售價/耗材/操作） */
+/* 成品表格收窄 + 固定欄寬 */
 .product-table { table-layout: fixed; }
 .product-table th, .product-table td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .product-table th:nth-child(1), .product-table td:nth-child(1) { width: 70px; }
 .product-table th:nth-child(2), .product-table td:nth-child(2) { width: 60px; }
 .product-table th:nth-child(3), .product-table td:nth-child(3) { width: 60px; }
-.product-table th:nth-child(4), .product-table td:nth-child(4) { width: 60px; }
 
 /* 四格費用：兩欄排版 */
-.fees-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  max-width: 360px;
-  margin: 0 auto;
-}
-.fee {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  justify-content: center;
-}
-.fee label {
-  font-size: 14px;
-  white-space: nowrap;
-}
+.fees-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 360px; margin: 0 auto; }
+.fee { display: flex; align-items: center; gap: 8px; justify-content: center; }
+.fee label { font-size: 14px; white-space: nowrap; }
 </style>

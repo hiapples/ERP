@@ -1,45 +1,38 @@
 import { Router } from 'express'
 import Item from '../models/item.js'
-
 const router = Router()
 
-// 取得全部成品
 router.get('/', async (req, res, next) => {
   try {
     const items = await Item.find({}).sort({ createdAt: 1 }).lean()
-    res.json({ items: items })
+    res.json({ items })
   } catch (e) { next(e) }
 })
 
-// 新增成品
 router.post('/', async (req, res, next) => {
   try {
     const body = {
       name: String(req.body.name || '').trim(),
       salePrice: Number(req.body.salePrice || 0),
-      consumableCost: Number(req.body.consumableCost || 0),
       type: 'product'
     }
-    if (!body.name) { return res.status(400).json({ error: 'name is required' }) }
+    if (!body.name) return res.status(400).json({ error: 'name is required' })
     const doc = await Item.create(body)
     res.json(doc)
   } catch (e) { next(e) }
 })
 
-// 更新成品
 router.put('/:id', async (req, res, next) => {
   try {
     const update = {
       name: req.body.name == null ? undefined : String(req.body.name).trim(),
-      salePrice: req.body.salePrice == null ? undefined : Number(req.body.salePrice),
-      consumableCost: req.body.consumableCost == null ? undefined : Number(req.body.consumableCost)
+      salePrice: req.body.salePrice == null ? undefined : Number(req.body.salePrice)
     }
     const doc = await Item.findByIdAndUpdate(req.params.id, update, { new: true })
     res.json(doc)
   } catch (e) { next(e) }
 })
 
-// 刪除成品
 router.delete('/:id', async (req, res, next) => {
   try {
     await Item.findByIdAndDelete(req.params.id)
