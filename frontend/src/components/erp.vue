@@ -269,6 +269,20 @@ const consumableMap = computed(() => {
   return m
 })
 
+// 報表總覽：四費總 & 總成本 & 淨利（若後端沒給）
+const fourFeesOfRow = (r) =>
+  Number(r?.stallFee || 0) +
+  Number(r?.parkingFee || 0) +
+  Number(r?.treatFee || 0) +
+  Number(r?.personnelFee || 0)
+
+const totalCostOfRow = (r) =>
+  Number(r?.costOfDay || 0) + fourFeesOfRow(r)
+
+const netProfitOfRow = (r) =>
+  Number(r?.revenueOfDay || 0) - totalCostOfRow(r)
+
+
 // 取得某日已存的報表
 function applyReportToForm(r) {
   const map = {}
@@ -800,9 +814,22 @@ watch(currentPage4, async (p) => {
                   <tr v-for="r in reportList" :key="r._id || r.date">
                     <td>{{ r.date }}</td>
                     <td>{{ Number(r.revenueOfDay || 0).toFixed(0) }}</td>
-                    <td>{{ Number(r.costOfDay || 0).toFixed(2) }}</td>
-                    <td>{{ r?.netProfit == null ? '' : Number(r.netProfit).toFixed(2) }}</td>
-                    <td class="text-center"><button class="delete-btn" @click="deleteReportByDate(r.date)">刪</button></td>
+
+                    <!-- 總成本 = 銷貨成本 + 四費總 -->
+                    <td>{{ totalCostOfRow(r).toFixed(2) }}</td>
+
+                    <!-- 後端若無 netProfit，用前端計算 -->
+                    <td>
+                      {{
+                        r?.netProfit == null
+                          ? netProfitOfRow(r).toFixed(2)
+                          : Number(r.netProfit).toFixed(2)
+                      }}
+                    </td>
+
+                    <td class="text-center">
+                      <button class="delete-btn" @click="deleteReportByDate(r.date)">刪</button>
+                    </td>
                   </tr>
                 </tbody>
               </table>
