@@ -791,12 +791,11 @@ watch(currentPage4, async (p) => {
 
           <!-- ★ 報表備註輸入框 -->
           <div class="d-flex justify-content-center align-items-center gap-3 mt-3" style="max-width:360px;margin:0 auto;">
-            <div class="fw-bold" style="white-space:nowrap;">備註：</div>
+            <div class="fw-bold" style="white-space:nowrap;">地點：</div>
             <input
               v-model="reportNote"
               type="text"
               class="form-control"
-              placeholder="可填寫當日特別狀況"
             />
           </div>
 
