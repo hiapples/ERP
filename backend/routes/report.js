@@ -8,6 +8,7 @@ async function computeTotals(itemsRows) {
   const names = Array.from(new Set((itemsRows || []).map(r => String(r.item || ''))))
   const priceMap = {}
   const consMap  = {}
+
   if (names.length) {
     const docs = await Item.find({ name: { $in: names } }).lean()
     for (const d of docs) {
@@ -51,12 +52,20 @@ router.post('/', async (req, res, next) => {
       stallFee: Number(req.body.stallFee || 0),
       parkingFee: Number(req.body.parkingFee || 0),
       treatFee: Number(req.body.treatFee || 0),
-      personnelFee: Number(req.body.personnelFee || 0)
+      personnelFee: Number(req.body.personnelFee || 0),
+      // ★ 新增：報表備註
+      note: String(req.body.note || '').trim()
     }
     if (!payload.date) return res.status(400).json({ error: 'date is required' })
 
     const { revenueOfDay, costOfDay } = await computeTotals(payload.items)
-    const netProfit = revenueOfDay - costOfDay - payload.stallFee - payload.parkingFee - payload.treatFee - payload.personnelFee
+    const netProfit =
+      revenueOfDay -
+      costOfDay -
+      payload.stallFee -
+      payload.parkingFee -
+      payload.treatFee -
+      payload.personnelFee
 
     const doc = await Report.findOneAndUpdate(
       { date: payload.date },

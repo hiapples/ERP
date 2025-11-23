@@ -260,7 +260,10 @@ const reportQty = ref({})        // { [productName]: qty }
 const stallFee = ref('')        // 攤販費
 const parkingFee = ref('')      // 停車費
 const treatFee = ref('')        // 請客費
-const personnelFee = ref('')    // 人事費
+const personnelFee = ref('')    // 油資費
+
+// ★ 報表備註
+const reportNote = ref('')      // 當日報表備註
 
 // 成品名 → 每份耗材成本
 const consumableMap = computed(() => {
@@ -298,6 +301,8 @@ function applyReportToForm(r) {
   parkingFee.value   = Number((r?.parkingFee ?? 0) || 0)
   treatFee.value     = Number((r?.treatFee ?? 0) || 0)
   personnelFee.value = Number((r?.personnelFee ?? 0) || 0)
+  // ★ 報表備註載入
+  reportNote.value   = r?.note || ''
 }
 
 const fetchReportOfDate = async () => {
@@ -309,11 +314,15 @@ const fetchReportOfDate = async () => {
       const map = {}; for (const it of productItems.value) map[it.name] = ''
       reportQty.value = map
       stallFee.value = parkingFee.value = treatFee.value = personnelFee.value = ''
+      // ★ 清空備註
+      reportNote.value = ''
     }
   } catch {
     const map = {}; for (const it of productItems.value) map[it.name] = ''
     reportQty.value = map
     stallFee.value = parkingFee.value = treatFee.value = personnelFee.value = ''
+    // ★ 清空備註
+    reportNote.value = ''
   }
 }
 
@@ -358,7 +367,7 @@ const submitReport = async () => {
     return
   }
   if (isEmpty(stallFee.value) || isEmpty(parkingFee.value) || isEmpty(treatFee.value) || isEmpty(personnelFee.value)) {
-    alert('❌ 請填寫「攤販費 / 停車費 / 請客費 / 人事費」（可填 0）')
+    alert('❌ 請填寫「攤販費 / 停車費 / 請客費 / 油資費」（可填 0）')
     return
   }
   const payload = {
@@ -367,7 +376,9 @@ const submitReport = async () => {
     stallFee: Number(stallFee.value || 0),
     parkingFee: Number(parkingFee.value || 0),
     treatFee: Number(treatFee.value || 0),
-    personnelFee: Number(personnelFee.value || 0)
+    personnelFee: Number(personnelFee.value || 0),
+    // ★ 報表備註一併送出
+    note: reportNote.value || ''
   }
   try {
     await axios.post(API + '/reports', payload)
@@ -774,9 +785,21 @@ watch(currentPage4, async (p) => {
           <div class="fees-grid mt-3">
             <div class="fee"><label>攤販費：</label><input v-model.number="stallFee" type="number" min="0" step="1" class="form-control text-center report2" /></div>
             <div class="fee"><label>停車費：</label><input v-model.number="parkingFee" type="number" min="0" step="1" class="form-control text-center report2" /></div>
-            <div class="fee"><label>人事費：</label><input v-model.number="personnelFee" type="number" min="0" step="1" class="form-control text-center report2" /></div>
-            <div class="fee"><label>請客費：</label><input v-model.number="treatFee" type="number" min="0" step="1" class="form-control text-center report2" /></div>
+            <div class="fee"><label>油資費：</label><input v-model.number="personnelFee" type="number" min="0" step="1" class="form-control text-center report2" /></div>
+            <div class="fee"><label>試喝費：</label><input v-model.number="treatFee" type="number" min="0" step="1" class="form-control text-center report2" /></div>
           </div>
+
+          <!-- ★ 報表備註輸入框 -->
+          <div class="d-flex justify-content-center align-items-center gap-3 mt-3" style="max-width:360px;margin:0 auto;">
+            <div class="fw-bold" style="white-space:nowrap;">備註：</div>
+            <input
+              v-model="reportNote"
+              type="text"
+              class="form-control"
+              placeholder="可填寫當日特別狀況"
+            />
+          </div>
+
           <div class="d-flex justify-content-center align-items-center gap-3 mt-3">
             <div class="fw-bold">淨利：</div>
             <div>{{ netProfit.toFixed(2) }}</div>
