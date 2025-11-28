@@ -801,7 +801,6 @@ watch(currentPage4, async (p) => {
           <div class="d-flex justify-content-center align-items-center gap-3 mt-3">
             <div class="fw-bold">淨利：</div>
             <div>{{ netProfit.toFixed(2) }}</div>
-            <div style="font-size: 14px;">(記得拿保證金1000元出來)</div>
           </div>
           <div class="d-flex justify-content-center mt-3">
             <button class="btn" style="min-width:200px;" @click="submitReport">送出報表</button>
